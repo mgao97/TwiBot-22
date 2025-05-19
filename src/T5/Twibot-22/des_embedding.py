@@ -1,44 +1,44 @@
-import torch
-from tqdm import tqdm
-from dataset_tool import fast_merge
-import numpy as np
-from transformers import pipeline, T5Tokenizer, T5EncoderModel
-import os
+# import torch
+# from tqdm import tqdm
+# from dataset_tool import fast_merge
+# import numpy as np
+# from transformers import pipeline, T5Tokenizer, T5EncoderModel
+# import os
 
-user,tweet=fast_merge(dataset="Twibot-20")
+# user,tweet=fast_merge(dataset="Twibot-20")
 
-user_text=list(user['description'])
-tweet_text = [text for text in tweet.text]
+# user_text=list(user['description'])
+# tweet_text = [text for text in tweet.text]
 
-pretrained_weights = 't5-small'
-model = T5EncoderModel.from_pretrained(pretrained_weights)
-tokenizer = T5Tokenizer.from_pretrained(pretrained_weights)
-feature_extract=pipeline('feature-extraction',model=model,tokenizer=tokenizer,device=2,padding=True, truncation=True,max_length=50)
+# pretrained_weights = 't5-small'
+# model = T5EncoderModel.from_pretrained(pretrained_weights)
+# tokenizer = T5Tokenizer.from_pretrained(pretrained_weights)
+# feature_extract=pipeline('feature-extraction',model=model,tokenizer=tokenizer,device=2,padding=True, truncation=True,max_length=50)
 
-def Des_embbeding():
-        print('Running feature1 embedding')
-        path="data/T5/Twibot-20/des_tensor.pt"
-        if not os.path.exists(path):
-            des_vec=[]
-            for k,each in enumerate(tqdm(user_text)):
-                if each is None:
-                    des_vec.append(torch.zeros(512))
-                else:
-                    feature=torch.Tensor(feature_extract(each))
-                    for (i,tensor) in enumerate(feature[0]):
-                        if i==0:
-                            feature_tensor=tensor
-                        else:
-                            feature_tensor+=tensor
-                    feature_tensor/=feature.shape[1]
-                    des_vec.append(feature_tensor)
+# def Des_embbeding():
+#         print('Running feature1 embedding')
+#         path="data/T5/Twibot-20/des_tensor.pt"
+#         if not os.path.exists(path):
+#             des_vec=[]
+#             for k,each in enumerate(tqdm(user_text)):
+#                 if each is None:
+#                     des_vec.append(torch.zeros(512))
+#                 else:
+#                     feature=torch.Tensor(feature_extract(each))
+#                     for (i,tensor) in enumerate(feature[0]):
+#                         if i==0:
+#                             feature_tensor=tensor
+#                         else:
+#                             feature_tensor+=tensor
+#                     feature_tensor/=feature.shape[1]
+#                     des_vec.append(feature_tensor)
                     
-            des_tensor=torch.stack(des_vec,0)
-            torch.save(des_tensor,path)
-        else:
-            des_tensor=torch.load(path)
-        print('Finished')
-        return des_tensor
+#             des_tensor=torch.stack(des_vec,0)
+#             torch.save(des_tensor,path)
+#         else:
+#             des_tensor=torch.load(path)
+#         print('Finished')
+#         return des_tensor
 
 # def tweets_embedding():
 #         print('Running feature2 embedding')
@@ -82,5 +82,85 @@ def Des_embbeding():
 #             tweets_tensor=torch.load(path)
 #         print('Finished')
 
-Des_embbeding()
+# Des_embbeding()
 # tweets_embedding()
+
+
+
+
+import torch
+from tqdm import tqdm
+from dataset_tool import fast_merge
+import numpy as np
+from transformers import T5Tokenizer, T5EncoderModel
+import os
+
+# 数据加载
+import torch
+from tqdm import tqdm
+from dataset_tool import fast_merge
+import numpy as np
+from transformers import pipeline
+import os
+import pandas as pd
+import json
+
+import pickle as pickle  # or import dill as pickle
+
+
+
+user=pd.read_json('/dev/shm/twi22/data/user.json')
+
+user_text=list(user['description'])
+
+# 模型加载
+pretrained_weights = 't5-small'
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+tokenizer = T5Tokenizer.from_pretrained(pretrained_weights)
+model = T5EncoderModel.from_pretrained(pretrained_weights).to(device)
+model.eval()
+
+# 嵌入函数
+def Des_embedding(batch_size=512, max_length=50):
+    print('Running feature1 embedding')
+    path = "/dev/shm/twi22/data/des_tensor.pt"
+    
+    if os.path.exists(path):
+        print('Loading cached embeddings...')
+        return torch.load(path)
+    
+    des_vec = []
+
+    with torch.no_grad():
+        for i in tqdm(range(0, len(user_text), batch_size)):
+            batch_texts = user_text[i:i+batch_size]
+            
+            # 替换 None 为 ""
+            batch_texts = [" " if text is None else text for text in batch_texts]
+            
+            # Tokenize
+            inputs = tokenizer(batch_texts, padding=True, truncation=True, return_tensors='pt', max_length=max_length)
+            input_ids = inputs['input_ids'].to(device)
+            attention_mask = inputs['attention_mask'].to(device)
+            
+            # Run model
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            embeddings = outputs.last_hidden_state  # shape: (batch, seq_len, hidden_size)
+            
+            # 取平均（忽略 padding）
+            mask = attention_mask.unsqueeze(-1).expand(embeddings.size())
+            summed = torch.sum(embeddings * mask, dim=1)
+            counts = torch.clamp(mask.sum(dim=1), min=1e-9)
+            averaged = summed / counts
+            
+            des_vec.append(averaged.cpu())
+    
+    des_tensor = torch.cat(des_vec, dim=0)
+    torch.save(des_tensor, path)
+    print('Finished')
+    return des_tensor
+
+des_tensor = Des_embedding()
+print(des_tensor.shape)  # e.g. torch.Size([num_users, 512])
+

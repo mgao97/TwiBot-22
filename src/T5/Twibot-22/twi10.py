@@ -7,7 +7,12 @@ os.environ['CUDA_VISIBLE_DEVICE'] = '1'
 import json
 DEVICE = 1
 
-each_user_tweets=json.load(open("src/twibot22_Botrgcn_feature/id_tweet.json",'r'))
+import ujson
+
+with open("/dev/shm/twi22/data/id_tweet.json", 'r', encoding='utf-8') as f:
+    each_user_tweets = ujson.load(f)
+
+# each_user_tweets=json.load(open("/dev/shm/twi22/data/id_tweet.json",'r'))
 
 pretrained_weights = 't5-small'
 tokenizer = T5Tokenizer.from_pretrained(pretrained_weights)
@@ -17,7 +22,7 @@ feature_extract=pipeline('feature-extraction',model=model,tokenizer=tokenizer,de
 
 def tweets_embedding():
         print('Running feature2 embedding')
-        path='data/twibot22/T5-tweet/'
+        path='/dev/shm/twi22/processed_data/'
         if True:
             tweets_list=[]
             for i in tqdm(range(len(each_user_tweets))):
