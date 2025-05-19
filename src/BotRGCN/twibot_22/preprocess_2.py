@@ -7,6 +7,11 @@ import os
 import pandas as pd
 import json
 
+import pickle as pickle  # or import dill as pickle
+with open('file.pkl', 'rb') as f:
+    data = pickle.load(f)
+
+
 user=pd.read_json('../datasets/Twibot-22/user.json')
 
 user_text=list(user['description'])

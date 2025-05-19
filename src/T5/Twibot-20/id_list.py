@@ -2,7 +2,7 @@ import json
 import torch
 import pandas as pd
 from pathlib import Path
-path1 = Path('datasets/Twibot-20/node.json')
+path1 = '/dev/shm/twi20/data/node.json'
 with open(path1, 'r') as f:
     users = json.loads(f.read())
     users = pd.DataFrame(users)
@@ -18,7 +18,7 @@ for user in users:
     except:
         continue
 
-path2 = Path('src/T5/Twibot-20/id_list.json')
+path2 = '/dev/shm/twi20/data/id_list.json'
 with open(path2, 'w') as f:
     json.dump(user_idlist, f)
 # import json

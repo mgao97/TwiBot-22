@@ -5,7 +5,8 @@ from tqdm import tqdm
 from datetime import datetime as dt
 import json
 print('loading raw data')
-path='../datasets/Twibot-22/'
+path ='/dev/shm/twi22/data/'
+path1 = '/dev/shm/twi22/processed_data/'
 
 user=pd.read_json(path+'user.json')
 edge=pd.read_csv(path+'edge.csv')
@@ -15,8 +16,8 @@ user_index_to_uid = list(user.id)
 uid_to_user_index = {x : i for i, x in enumerate(user_index_to_uid)}
 
 print('extracting labels and splits')
-split=pd.read_csv("../datasets/Twibot-22/split.csv")
-label=pd.read_csv("../datasets/Twibot-22/label.csv")
+split=pd.read_csv(path+"split.csv")
+label=pd.read_csv(path+"label.csv")
 uid_label={uid:label for uid, label in zip(label['id'].values,label['label'].values)}
 uid_split={uid:split for uid, split in zip(split['id'].values,split['split'].values)}
 label_new=[]
@@ -41,10 +42,10 @@ labels=torch.LongTensor(label_new)
 train_mask = torch.LongTensor(train_idx)
 valid_mask = torch.LongTensor(val_idx)
 test_mask = torch.LongTensor(test_idx)
-torch.save(train_mask,"./processed_data/train_idx.pt")
-torch.save(valid_mask,"./processed_data/val_idx.pt")
-torch.save(test_mask,"./processed_data/test_idx.pt")
-torch.save(labels,'./processed_data/label.pt')
+torch.save(train_mask,path1+"train_idx.pt")
+torch.save(valid_mask,path1+"val_idx.pt")
+torch.save(test_mask,path1+"test_idx.pt")
+torch.save(labels,path1+"label.pt")
 
 print('extracting edge_index&edge_type')
 edge_index=[]
@@ -65,8 +66,8 @@ for i in tqdm(range(len(edge))):
         except KeyError:
             continue
         
-torch.save(torch.LongTensor(edge_index).t(),"./processed_data/edge_index.pt")
-torch.save(torch.LongTensor(edge_type),"./processed_data/edge_type.pt")
+torch.save(torch.LongTensor(edge_index).t(),path1+"edge_index.pt")
+torch.save(torch.LongTensor(edge_type),path1+"edge_type.pt")
 
 print('extracting num_properties')
 following_count=[]
@@ -196,17 +197,17 @@ torch.save(num_properties_tensor,'./processed_data/num_properties_tensor.pt')
 
 torch.save(cat_properties_tensor,'./processed_data/cat_properties_tensor.pt')
 
-print("extracting each_user's tweets")
-id_tweet={i:[] for i in range(len(user_idx))}
-for i in range(9):
-    name='tweet_'+str(i)+'.json'
-    user_tweets=json.load(open("../../datasets/Twibot-22/"+name,'r'))
-    for each in user_tweets:
-        uid='u'+str(each['author_id'])
-        text=each['text']
-        try:
-            index=uid_index[uid]
-            id_tweet[index].append(text)
-        except KeyError:
-            continue
-json.dump(id_tweet,open('./processed_data/id_tweet.json','w'))
+# print("extracting each_user's tweets")
+# id_tweet={i:[] for i in range(len(user_idx))}
+# for i in range(9):
+#     name='tweet_'+str(i)+'.json'
+#     user_tweets=json.load(open("../../datasets/Twibot-22/"+name,'r'))
+#     for each in user_tweets:
+#         uid='u'+str(each['author_id'])
+#         text=each['text']
+#         try:
+#             index=uid_index[uid]
+#             id_tweet[index].append(text)
+#         except KeyError:
+#             continue
+# json.dump(id_tweet,open('./processed_data/id_tweet.json','w'))

@@ -7,19 +7,23 @@ from torch_geometric.loader import NeighborLoader
 from tqdm import tqdm
 import torch.nn as nn
 from model import BotGAT, BotGCN, BotRGCN
+import os
+import pandas as pd
+import numpy as np
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 parser = ArgumentParser()
-parser.add_argument('--dataset', type=str)
-parser.add_argument('--mode', type=str, default='GCN')
+parser.add_argument('--dataset', type=str, default='Twibot-20')
+parser.add_argument('--mode', type=str, default='GAT')
 parser.add_argument('--visible', type=bool, default=False)
 parser.add_argument('--hidden_dim', type=int, default=128)
-parser.add_argument('--max_epoch', type=int, default=1000)
+parser.add_argument('--max_epoch', type=int, default=50)
 parser.add_argument('--batch_size', type=int, default=128)
-parser.add_argument('--no_up', type=int, default=50)
+parser.add_argument('--no_up', type=int, default=10)
 parser.add_argument('--lr', type=float, default=1e-4)
 parser.add_argument('--weight_decay', type=float, default=1e-5)
 parser.add_argument('--dropout', type=float, default=0.3)
+parser.add_argument('--seed', type=int, default=97)
 args = parser.parse_args()
 
 dataset_name = args.dataset
@@ -161,8 +165,18 @@ def train():
         if cnt == no_up:
             break
     model.load_state_dict(best_state_dict)
+    results = []
     test_metrics = validation(max_epoch, 'test', model, loss_fn, test_loader)
-    torch.save(best_state_dict, 'checkpoints/{}_{}.pt'.format(dataset_name, test_metrics['acc']))
+    test_metrics['seed'] = args.seed
+    results.append(test_metrics)
+    # 生成表格
+    results_df = pd.DataFrame(results)
+    print(results_df.to_markdown(index=False))
+
+    # 保存结果到CSV
+    results_df.to_csv(f'GAT_{args.dataset}.csv', mode='a', header=not os.path.exists(f'GAT_{args.dataset}.csv'), index=False)
+    
+    # torch.save(best_state_dict, 'checkpoints/{}_{}.pt'.format(dataset_name, test_metrics['acc']))
     for key, value in test_metrics.items():
         print(key, value)
 

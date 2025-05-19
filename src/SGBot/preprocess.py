@@ -8,8 +8,11 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+
 parser = ArgumentParser()
-parser.add_argument('--dataset', type=str)
+parser.add_argument('--dataset', type=str, default='Twibot-20')
+parser.add_argument('--path', type=str, default='/dev/shm/twi20/data/')
+# parser.add_argument('--seed', type=int, default=0)
 args = parser.parse_args()
 
 dataset = args.dataset
@@ -22,12 +25,8 @@ collect_year = dataset.split('-')[-1]
 if len(collect_year) == 2:
     collect_year = '20{}'.format(collect_year)
 
-path = '../../datasets/{}'.format(dataset)
-if not osp.exists(path):
-    raise KeyError
-
-bi_gram_likelihood = json.load(open('tmp/{}/bi_gram_likelihood.json'.format(dataset)))
-label_data = pd.read_csv('../../datasets/{}/label.csv'.format(dataset))
+bi_gram_likelihood = json.load(open('/dev/shm/twi22/data/bi_gram_likelihood.json'))
+label_data = pd.read_csv(args.path+'label.csv'.format(dataset))
 label_index = {}
 for index, item in label_data.iterrows():
     label_index[item['id']] = int(item['label'] == 'bot')
@@ -87,7 +86,11 @@ def calc_age(created_at):
 
 
 if __name__ == '__main__':
-    with open('{}/node.json'.format(path) if dataset != 'Twibot-22' else '{}/user.json'.format(path)) as f:
+    if args.dataset == 'Twibot-22':
+        path = '/dev/shm/twi22/data/'
+    else:
+        path = '/dev/shm/twi20/data/'
+    with open(path+'node.json' if dataset != 'Twibot-22' else path+'user.json') as f:
         data = ijson.items(f, 'item')
         features = []
         idx = []
@@ -134,7 +137,7 @@ if __name__ == '__main__':
     print(len(idx))
     print(features.shape)
     print(labels.shape)
-    json.dump(idx, open('tmp/{}/idx.json'.format(dataset), 'w'))
-    np.save('tmp/{}/features.npy'.format(dataset), features)
-    np.save('tmp/{}/labels.npy'.format(dataset), labels)
+    json.dump(idx, open(path+'tmp/{}/idx.json'.format(dataset), 'w'))
+    np.save(path+'tmp/{}/features.npy'.format(dataset), features)
+    np.save(path+'tmp/{}/labels.npy'.format(dataset), labels)
 

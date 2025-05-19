@@ -11,12 +11,13 @@ from transformers import *
 pretrained_weights = 't5-small'
 tokenizer = T5Tokenizer.from_pretrained(pretrained_weights)
 model = T5EncoderModel.from_pretrained(pretrained_weights)
-feature_extractor = pipeline('feature-extraction', model=model, tokenizer=tokenizer, device=5, padding=True, truncation=True, max_length=50)
+feature_extractor = pipeline('feature-extraction', model=model, tokenizer=tokenizer, device='cpu', padding=True, truncation=True, max_length=50)
 
 users_tweets = np.load('/dev/shm/twi22/data/user_tweets_dict.npy', allow_pickle=True).tolist()
+print(len(users_tweets))
 
 tweets_tensor = []
-for i in tqdm(range(11826)):
+for i in tqdm(range(1000000)):
     user_tweets_tensor = []
     try:
         for tweet in users_tweets[i]:
@@ -28,3 +29,8 @@ for i in tqdm(range(11826)):
     except:
         user_tweets_tensor = torch.randn(512)
     tweets_tensor.append(user_tweets_tensor)
+
+
+path3 = '/dev/shm/twi22/data/'
+tweets_tensor = torch.stack(tweets_tensor)
+torch.save(tweets_tensor, path3+'tweets_tensor_t5.pt')

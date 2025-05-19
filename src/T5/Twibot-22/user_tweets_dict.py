@@ -20,27 +20,21 @@ tid_to_tweets_index = {x: i for i, x in enumerate(tweets_index_to_tid)}
 
 path2 = '/dev/shm/twi22/data/edge.csv'
 edge_data = pd.read_csv(path2)
+print(edge_data['relation'].unique())
+
+
+
 edge_data = edge_data[edge_data['relation'] == 'post']
 
-# edge_data['source_id'] = list(map(lambda x: uid_to_users_index[x], edge_data['source_id'].values))
-# edge_data['target_id'] = list(map(lambda x: tid_to_tweets_index[x], edge_data['target_id'].values))
-# edge_data = edge_data.reset_index(drop=True)
-edge_data['source_id'] = edge_data['source_id'].map(uid_to_users_index)
-edge_data['target_id'] = edge_data['target_id'].map(tid_to_tweets_index)
-edge_data = edge_data.dropna(subset=['source_id', 'target_id']).reset_index(drop=True)
+edge_data['source_id'] = list(map(lambda x: uid_to_users_index[x], edge_data['source_id'].values))
+edge_data['target_id'] = list(map(lambda x: tid_to_tweets_index[x], edge_data['target_id'].values))
+edge_data = edge_data.reset_index(drop=True)
+
 
 # 显式转换为整数
 edge_data['source_id'] = edge_data['source_id'].astype(int)
 edge_data['target_id'] = edge_data['target_id'].astype(int)
 
-# user_tweets_dict = {i: [] for i in range(len(users))}
-
-# for i in tqdm(range(len(edge_data))):
-#     try:
-#         user_index = edge_data['source_id'][i]
-#         user_tweets_dict[user_index].append(tweets['text'][edge_data['target_id'][i] + len(users)])
-#     except:
-#         continue
 
 user_to_posts = {i: [] for i in range(len(users))}
 
@@ -56,3 +50,13 @@ for i in tqdm(range(len(edge_data))):
 
 path3 = '/dev/shm/twi22/data/'
 np.save(path3+'user_tweets_dict.npy', user_to_posts)
+
+
+# user_tweets_dict = {i: [] for i in range(len(users))}
+
+# for i in tqdm(range(len(edge_data))):
+#     try:
+#         user_index = edge_data['source_id'][i]
+#         user_tweets_dict[user_index].append(tweets['text'][edge_data['target_id'][i] + len(users)])
+#     except:
+#         continue

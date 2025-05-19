@@ -339,14 +339,23 @@ class Twibot22(Dataset):
         
         
     def dataloader(self):
-        labels=self.load_labels()
-        #self.Des_Preprocess()
-        des_tensor=self.Des_embbeding()
-        #self.tweets_preprocess()
-        tweets_tensor=self.tweets_embedding()
-        num_prop=self.num_prop_preprocess()
-        category_prop=self.cat_prop_preprocess()
-        edge_index,edge_type=self.Build_Graph()
-        train_idx,val_idx,test_idx=self.train_val_test_mask()
+        # labels=self.load_labels()
+        # #self.Des_Preprocess()
+        # des_tensor=self.Des_embbeding()
+        # #self.tweets_preprocess()
+        # tweets_tensor=self.tweets_embedding()
+        # num_prop=self.num_prop_preprocess()
+        # category_prop=self.cat_prop_preprocess()
+        # edge_index,edge_type=self.Build_Graph()
+        # train_idx,val_idx,test_idx=self.train_val_test_mask()
+
+        print('Loading dataset... features and labels...',end='   ')
+        path = '/dev/shm/twi22/processed_data/'
+        labels = torch.load(path+'label.pt')
+        des_tensor, tweets_tensor = torch.load(path+'user_des_feats1.pt'), torch.load(path+'user_tweet_feats.pt')
+        num_prop, category_prop = torch.load(path+'num_properties_tensor.pt'), torch.load(path+'cat_properties_tensor.pt')
+        edge_index, edge_type = torch.load(path+'edge_index.pt'), torch.load(path+'edge_type.pt')
+        train_idx, val_idx, test_idx = torch.load(path+'train_idx.pt'), torch.load(path+'val_idx.pt'), torch.load(path+'test_idx.pt')
+
         return des_tensor,tweets_tensor,num_prop,category_prop,edge_index,edge_type,labels,train_idx,val_idx,test_idx
     

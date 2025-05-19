@@ -1,4 +1,4 @@
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score,precision_recall_curve,auc
 from torch_geometric.nn import HGTConv
 import pytorch_lightning as pl
 from torch import nn
@@ -9,14 +9,17 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from pytorch_lightning.callbacks import ModelCheckpoint
 from os import listdir
 from torch_geometric.data import HeteroData
+import os
+import pandas as pd
+import numpy as np
 
 def load_data(args):
     
     print("loading features...")
     cat_features = torch.load(args.path + "cat_properties_tensor.pt", map_location="cpu")
     prop_features = torch.load(args.path + "num_properties_tensor.pt", map_location="cpu")
-    tweet_features = torch.load(args.path + "tweets_tensor.pt", map_location="cpu")
-    des_features = torch.load(args.path + "des_tensor.pt", map_location="cpu")
+    tweet_features = torch.load(args.path + "user_tweet_feats.pt", map_location="cpu")
+    des_features = torch.load(args.path + "user_des_feats1.pt", map_location="cpu")
     x = torch.cat((cat_features, prop_features, tweet_features, des_features), dim=1)
     
     print("loading edges & label...")
@@ -133,8 +136,8 @@ class HGTDetector(pl.LightningModule):
             acc = accuracy_score(label.cpu(), pred_binary.cpu())
             f1 = f1_score(label.cpu(), pred_binary.cpu())
             
-            self.log("val_acc", acc)
-            self.log("val_f1", f1)
+            self.log("val_acc", acc, on_step=False, batch_size=label.size(0))
+            self.log("val_f1", f1, on_step=False, batch_size=label.size(0))
 
             # print("acc: {} f1: {}".format(acc, f1))
     
@@ -167,21 +170,92 @@ class HGTDetector(pl.LightningModule):
         
             pred_binary = torch.argmax(pred, dim=1)
 
-            pred_test.append(pred_binary.squeeze().cpu())
-            pred_test_prob.append(pred[:,1].squeeze().cpu())
-            label_test.append(label.squeeze().cpu())
+            label_np = label.detach().cpu().float().numpy()
+            pred_prob_np = pred[:, 1].detach().cpu().float().numpy()
+            Auc = roc_auc_score(label_np, pred_prob_np)
+
+            pred_binary_np = pred_binary.detach().cpu().float().numpy()
+            acc = accuracy_score(label_np, pred_binary_np)
+            f1 = f1_score(label_np, pred_binary_np)
+            precision = precision_score(label_np, pred_binary_np)
+            recall = recall_score(label_np, pred_binary_np)
+
+            # 计算 Precision-Recall 曲线
+            precision1, recall1, _ = precision_recall_curve(label_np, pred_prob_np)
+
+            # 计算 AUCPR
+            aucpr = auc(recall1, precision1)
+
+            # 计算精确率为80%时的召回率
+            recall_at_p80 = 0
+            for pi, ri in zip(precision1, recall1):
+                if pi >= 0.8:
+                    recall_at_p80 = ri
+                    break
+
+            # 计算精确率为85%时的召回率
+            recall_at_p85 = 0
+            for pi, ri in zip(precision1, recall1):
+                if pi >= 0.85:
+                    recall_at_p85 = ri
+                    break
+
+            # 计算精确率为90%时的召回率
+            recall_at_p90 = 0
+            for pi, ri in zip(precision1, recall1):
+                if pi >= 0.9:
+                    recall_at_p90 = ri
+                    break
+
+
+            print("Test set results:",
+                    "test_accuracy= {:.4f}".format(acc),
+                    "precision= {:.4f}".format(precision),
+                    "recall= {:.4f}".format(recall),
+                    "f1_score= {:.4f}".format(f1),
+                    "aucroc= {:.4f}".format(Auc),
+                    "aucpr= {:.4f}".format(aucpr),
+                    "recall at precision 80%={:.4f}".format(recall_at_p80),
+                    "recall at precision 85%={:.4f}".format(recall_at_p85),
+                    "recall at precision 90%={:.4f}".format(recall_at_p90)
+                    )
             
-            acc = accuracy_score(label.cpu(), pred_binary.cpu())
-            f1 = f1_score(label.cpu(), pred_binary.cpu())
-            precision =precision_score(label.cpu(), pred_binary.cpu())
-            recall = recall_score(label.cpu(), pred_binary.cpu())
-            auc = roc_auc_score(label.cpu(), pred[:,1].cpu())
+            # 记录结果
+            results.append({
+                'seed': args.seed,
+                'Accuracy': acc,
+                'Precision': precision,
+                'Recall': recall,
+                'F1': f1,
+                'AUCROC': Auc,
+                'AUC-PR': aucpr,
+                'Recall@P80': recall_at_p80,
+                'Recall@P85': recall_at_p85,
+                'Recall@P90': recall_at_p90
+            })
+            # 生成表格
+            results_df = pd.DataFrame(results)
+            print(results_df.to_markdown(index=False))
+
+            # 保存结果到CSV
+            results_df.to_csv('HGT_twi22.csv', mode='a', header=not os.path.exists(f'HGT_twi22.csv'), index=False)
+
+
+            # pred_test.append(pred_binary.squeeze().cpu())
+            # pred_test_prob.append(pred[:,1].squeeze().cpu())
+            # label_test.append(label.squeeze().cpu())
+            
+            # acc = accuracy_score(label.cpu(), pred_binary.cpu())
+            # f1 = f1_score(label.cpu(), pred_binary.cpu())
+            # precision =precision_score(label.cpu(), pred_binary.cpu())
+            # recall = recall_score(label.cpu(), pred_binary.cpu())
+            # auc = roc_auc_score(label.cpu(), pred[:,1].cpu())
 
             self.log("acc", acc)
             self.log("f1",f1)
             self.log("precision", precision)
             self.log("recall", recall)
-            self.log("auc", auc)
+            self.log("auc", Auc)
 
             # print("acc: {} \t f1: {} \t precision: {} \t recall: {} \t auc: {}".format(acc, f1, precision, recall, auc))
 
@@ -197,7 +271,7 @@ class HGTDetector(pl.LightningModule):
 
 
 parser = argparse.ArgumentParser(description="HGT")
-parser.add_argument("--path", type=str, default="/data2/whr/czl/TwiBot22-baselines/src/BotRGCN/data_twi22/", help="dataset path")
+parser.add_argument("--path", type=str, default="/dev/shm/twi22/processed_data/", help="dataset path")
 parser.add_argument("--numeric_num", type=int, default=5, help="dataset path")
 parser.add_argument("--linear_channels", type=int, default=128, help="linear channels")
 parser.add_argument("--cat_num", type=int, default=3, help="catgorical features")
@@ -206,22 +280,20 @@ parser.add_argument("--des_channel", type=int, default=768, help="description ch
 parser.add_argument("--tweet_channel", type=int, default=768, help="tweet channel")
 parser.add_argument("--out_channel", type=int, default=128, help="description channel")
 parser.add_argument("--dropout", type=float, default=0.5, help="description channel")
-parser.add_argument("--batch_size", type=int, default=256, help="description channel")
+parser.add_argument("--batch_size", type=int, default=512, help="description channel")
 parser.add_argument("--epochs", type=int, default=50, help="description channel")
 parser.add_argument("--lr", type=float, default=1e-3, help="description channel")
 parser.add_argument("--l2_reg", type=float, default=3e-5, help="description channel")
-parser.add_argument("--random_seed", type=int, default=None, help="random")
+parser.add_argument("--seed", type=int, default=None, help="random")
 parser.add_argument("--test_batch_size", type=int, default=200, help="random")
 
 if __name__ == "__main__":
-    global args, pred_test, pred_test_prob, label_test
+    global args
     args = parser.parse_args()
-    pred_test = []
-    pred_test_prob = []
-    label_test = []
+    results = []
 
-    if args.random_seed != None:
-        pl.seed_everything(args.random_seed)
+    if args.seed != None:
+        pl.seed_everything(args.seed)
         
     checkpoint_callback = ModelCheckpoint(
         monitor='val_acc',
@@ -244,26 +316,14 @@ if __name__ == "__main__":
     test_loader = NeighborLoader(data, num_neighbors=[256]*2, input_nodes=("user",data.test_idx), batch_size=args.test_batch_size)
     
     model = HGTDetector(args)
-    trainer = pl.Trainer(gpus=1, num_nodes=1, max_epochs=args.epochs, precision=16, log_every_n_steps=1, callbacks=[checkpoint_callback])
+    trainer = pl.Trainer(num_nodes=1, max_epochs=args.epochs, precision=16, log_every_n_steps=1, callbacks=[checkpoint_callback])
     
     trainer.fit(model, train_loader, valid_loader)
 
-    dir = './lightning_logs/version_{}/checkpoints/'.format(trainer.logger.version)
-    best_path = './lightning_logs/version_{}/checkpoints/{}'.format(trainer.logger.version, listdir(dir)[0])
+
+    dir = './hgt/lightning_logs/version_{}/checkpoints/'.format(trainer.logger.version)
+    best_path = './hgt/lightning_logs/version_{}/checkpoints/{}'.format(trainer.logger.version, listdir(dir)[0])
 
     best_model = HGTDetector.load_from_checkpoint(checkpoint_path=best_path, args=args)
     trainer.test(best_model, test_loader, verbose=True)
     
-    pred_test = torch.cat(pred_test).cpu()
-    pred_test_prob = torch.cat(pred_test_prob).cpu()
-    label_test = torch.cat(label_test).cpu()
-    
-    print(pred_test.size())
-    
-    acc = accuracy_score(label_test.cpu(), pred_test.cpu())
-    f1 = f1_score(label_test.cpu(), pred_test.cpu())
-    precision =precision_score(label_test.cpu(), pred_test.cpu())
-    recall = recall_score(label_test.cpu(), pred_test.cpu())
-    auc = roc_auc_score(label_test.cpu(), pred_test_prob.cpu())
-    
-    print("acc: {} \t f1: {} \t precision: {} \t recall: {} \t auc: {}".format(acc, f1, precision, recall, auc))

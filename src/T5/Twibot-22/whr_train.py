@@ -106,7 +106,7 @@ class RobertaTrianer:
                  train_loader,
                  val_loader,
                  test_loader,
-                 epochs=250,
+                 epochs=50,
                  input_dim=768,
                  hidden_dim=256,
                  dropout=0.5,

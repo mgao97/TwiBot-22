@@ -10,9 +10,12 @@ def null_metrics():
         'f1-score': 0.0,
         'precision': 0.0,
         'recall': 0.0,
-        'mcc': 0.0,
+        # 'mcc': 0.0,
         'roc-auc': 0.0,
-        'pr-auc': 0.0
+        'pr-auc': 0.0,
+        'Recall@P80': 0.0,
+        'Recall@P85': 0.0,
+        'Recall@P90': 0.0
     }
 
 
@@ -31,17 +34,44 @@ def calc_metrics(y, pred):
     pred_label = pred_label.to('cpu').tolist()
     pred_score = pred_score.to('cpu').tolist()
     precision, recall, _thresholds = precision_recall_curve(y, pred_score)
+
+    # 计算精确率为80%时的召回率
+    recall_at_p80 = 0
+    for pi, ri in zip(precision, recall):
+        if pi >= 0.8:
+            recall_at_p80 = ri
+            break
+
+    # 计算精确率为85%时的召回率
+    recall_at_p85 = 0
+    for pi, ri in zip(precision, recall):
+        if pi >= 0.85:
+            recall_at_p85 = ri
+            break
+
+    # 计算精确率为90%时的召回率
+    recall_at_p90 = 0
+    for pi, ri in zip(precision, recall):
+        if pi >= 0.9:
+            recall_at_p90 = ri
+            break
+
     metrics = {
+        
         'acc': accuracy_score(y, pred_label),
-        'f1-score': f1_score(y, pred_label),
         'precision': precision_score(y, pred_label),
         'recall': recall_score(y, pred_label),
-        'mcc': matthews_corrcoef(y, pred_label),
+        'f1-score': f1_score(y, pred_label),
+        # 'mcc': matthews_corrcoef(y, pred_label),
         'roc-auc': roc_auc_score(y, pred_score),
-        'pr-auc': auc(recall, precision)
+        'pr-auc': auc(recall, precision),
+        'Recall@P80': recall_at_p80,
+        'Recall@P85': recall_at_p85,
+        'Recall@P90': recall_at_p90
     }
+
     plog = ''
-    for key in ['acc', 'f1-score', 'mcc']:
+    for key in ['acc', 'f1-score']:
         plog += ' {}: {:.6}'.format(key, metrics[key])
     return metrics, plog
 
@@ -51,8 +81,8 @@ def is_better(now, pre):
         return now['acc'] > pre['acc']
     if now['f1-score'] != pre['f1-score']:
         return now['f1-score'] > pre['f1-score']
-    if now['mcc'] != pre['mcc']:
-        return now['mcc'] > pre['mcc']
+    # if now['mcc'] != pre['mcc']:
+    #     return now['mcc'] > pre['mcc']
     if now['pr-auc'] != pre['pr-auc']:
         return now['pr-auc'] > pre['pr-auc']
     if now['roc-auc'] != pre['roc-auc']:

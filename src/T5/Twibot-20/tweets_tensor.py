@@ -11,12 +11,12 @@ from transformers import *
 pretrained_weights = 't5-small'
 tokenizer = T5Tokenizer.from_pretrained(pretrained_weights)
 model = T5EncoderModel.from_pretrained(pretrained_weights)
-feature_extractor = pipeline('feature-extraction', model=model, tokenizer=tokenizer, device=5, padding=True, truncation=True, max_length=50)
+feature_extractor = pipeline('feature-extraction', model=model, tokenizer=tokenizer, device='cpu', padding=True, truncation=True, max_length=50)
 
-users_tweets = np.load('src/T5/Twibot-20/data/user_tweets_dict.npy', allow_pickle=True).tolist()
+users_tweets = np.load('/dev/shm/twi20/data/user_tweets_dict.npy', allow_pickle=True).tolist()
 
 tweets_tensor = []
-for i in tqdm(range(11826)):
+for i in tqdm(range(229580)):
     user_tweets_tensor = []
     try:
         for tweet in users_tweets[i]:
@@ -29,6 +29,6 @@ for i in tqdm(range(11826)):
         user_tweets_tensor = torch.randn(512)
     tweets_tensor.append(user_tweets_tensor)
 
-# path3 = Path('src/T5/Twibot-20/data')
-# tweets_tensor = torch.stack(tweets_tensor)
-# torch.save(tweets_tensor, path3 / 'tweets_tensor_220000.pt')
+path3 = '/dev/shm/twi20/data/'
+tweets_tensor = torch.stack(tweets_tensor)
+torch.save(tweets_tensor, path3+'tweets_tensor_t5.pt')

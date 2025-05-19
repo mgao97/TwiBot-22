@@ -5,18 +5,25 @@ import numpy as np
 from transformers import pipeline
 import os
 
+path = '/dev/shm/twi20/data/'
+path1 = '/dev/shm/twi20/processed_data/'
+
 user,tweet=fast_merge(dataset="Twibot-20")
 
 user_text=list(user['description'])
 tweet_text = [text for text in tweet.text]
-each_user_tweets=torch.load('./processed_data/each_user_tweets.npy')
+each_user_tweets=np.load(path1+'each_user_tweets.npy',allow_pickle=True)
 
-feature_extract=pipeline('feature-extraction',model='roberta-base',tokenizer='roberta-base',device=3,padding=True, truncation=True,max_length=50, add_special_tokens = True)
+print(type(each_user_tweets))
+print(each_user_tweets.shape)
+print(len(each_user_tweets))
+
+feature_extract=pipeline('feature-extraction',model='../../../../Twibot-22/roberta-base',tokenizer='roberta-base',device='cpu',padding=True, truncation=True,max_length=50, add_special_tokens = True)
 
 def Des_embbeding():
         print('Running feature1 embedding')
-        path="./processed_data/des_tensor.pt"
-        if not os.path.exists(path):
+        path2=path1+"des_tensor.pt"
+        if not os.path.exists(path2):
             des_vec=[]
             for k,each in enumerate(tqdm(user_text)):
                 if each is None:
@@ -32,16 +39,16 @@ def Des_embbeding():
                     des_vec.append(feature_tensor)
                     
             des_tensor=torch.stack(des_vec,0)
-            torch.save(des_tensor,path)
+            torch.save(des_tensor,path2)
         else:
-            des_tensor=torch.load(path)
+            des_tensor=torch.load(path2)
         print('Finished')
         return des_tensor
 
 def tweets_embedding():
         print('Running feature2 embedding')
-        path="./processed_data/tweets_tensor.pt"
-        if not os.path.exists(path):
+        path2=path1+"tweets_tensor.pt"
+        if not os.path.exists(path2):
             tweets_list=[]
             for i in tqdm(range(len(each_user_tweets))):
                 if len(each_user_tweets[i])==0:
@@ -73,11 +80,13 @@ def tweets_embedding():
                 tweets_list.append(total_each_person_tweets)
                         
             tweet_tensor=torch.stack(tweets_list)
-            torch.save(tweet_tensor,"./processed_data/tweets_tensor.pt")
+            torch.save(tweet_tensor,path2+"tweets_tensor.pt")
             
         else:
-            tweets_tensor=torch.load(path)
+            tweets_tensor=torch.load(path2)
         print('Finished')
 
-Des_embbeding()
+# Des_embbeding()
+# print('des_tensor.shape:',Des_embbeding().shape)
 tweets_embedding()
+print('tweets_tensor.shape:',tweets_embedding().shape)

@@ -122,9 +122,9 @@ model = T5EncoderModel.from_pretrained(pretrained_weights).to(device)
 model.eval()
 
 # 嵌入函数
-def Des_embedding(batch_size=512, max_length=50):
+def Des_embedding(batch_size=1024, max_length=50):
     print('Running feature1 embedding')
-    path = "/dev/shm/twi22/data/des_tensor.pt"
+    path = "/dev/shm/twi22/data/des_tensor_t5.pt"
     
     if os.path.exists(path):
         print('Loading cached embeddings...')

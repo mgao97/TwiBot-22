@@ -227,7 +227,7 @@ if __name__ == "__main__":
     model = RGTDetector(args)
     trainer = pl.Trainer(gpus=1, num_nodes=1, max_epochs=args.epochs, precision=16, log_every_n_steps=1, callbacks=[checkpoint_callback])
     
-    trainer.fit(model, train_loader, valid_loader)
+    # trainer.fit(model, train_loader, valid_loader)
 
     dir = './lightning_logs/version_{}/checkpoints/'.format(trainer.logger.version)
     best_path = './lightning_logs/version_{}/checkpoints/{}'.format(trainer.logger.version, listdir(dir)[0])
