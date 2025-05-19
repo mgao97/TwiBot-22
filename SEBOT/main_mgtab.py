@@ -11,11 +11,17 @@ from BackBone.rgcn import FACNConv as RGCNConv
 # from BackBone.self_attention import SelfAttention
 import argparse
 import pickle
-from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score,auc,roc_auc_score,precision_recall_curve
+from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score,auc,roc_auc_score,precision_recall_curve,auc
 from sklearn.linear_model import LogisticRegression
 from sklearn.utils import shuffle
 
-PWD = os.path.dirname(os.path.realpath(__file__))
+
+import pandas as pd
+import os
+import numpy as np
+import random
+
+PWD = '/dev/shm/mgtab/'
 
 
 def edge_mask(edge_index, edge_attr, pe):
@@ -298,8 +304,8 @@ class SEBot(nn.Module):
             test_out = torch.cat([out_u, out_g, out_c],
                                  dim=1)[batch['data'].test_idx]
             
-            torch.save(test_out, 'sebot_mgtab_emb.pt')
-            torch.save(batch['data'].y[batch['data'].test_idx].cpu(), 'sebot_mgtab_y.pt')
+            torch.save(test_out, '/dev/shm/mgtab/res/sebot_mgtab_emb.pt')
+            torch.save(batch['data'].y[batch['data'].test_idx].cpu(), '/dev/shm/mgtab/res/sebot_mgtab_y.pt')
 
             test_out = self.classifier(test_out)
             test_loss = F.cross_entropy(
@@ -314,6 +320,62 @@ class SEBot(nn.Module):
             test_precision1, test_recall1, _ = precision_recall_curve(test_label, test_pred)
             test_aucpr = auc(test_recall1, test_precision1)
             test_rocauc = roc_auc_score(test_label, test_pred)
+
+            # 计算精确率为80%时的召回率
+            recall_at_p80 = 0
+            for pi, ri in zip(test_precision1, test_recall1):
+                if pi >= 0.8:
+                    recall_at_p80 = ri
+                    break
+
+            # 计算精确率为85%时的召回率
+            recall_at_p85 = 0
+            for pi, ri in zip(test_precision1, test_recall1):
+                if pi >= 0.85:
+                    recall_at_p85 = ri
+                    break
+
+            # 计算精确率为90%时的召回率
+            recall_at_p90 = 0
+            for pi, ri in zip(test_precision1, test_recall1):
+                if pi >= 0.9:
+                    recall_at_p90 = ri
+                    break
+
+
+            test_rocauc = roc_auc_score(test_label, test_pred)
+            # if test_acc > 0.869:
+            #     print('large test_acc: ', test_acc)
+            #     _ = self.backbone(batch['data'], return_attention=True)
+
+            # 打印这些指标
+            print(f"Test Accuracy: {test_acc:.4f}")
+            print(f"Test F1 Score: {test_f1:.4f}")
+            print(f"Test Recall: {test_recall:.4f}")
+            print(f"Test Precision: {test_precision:.4f}")
+            print(f"Test AUC-PR: {test_aucpr:.4f}")
+            print(f"Test ROC-AUC: {test_rocauc:.4f}")
+
+            # 记录结果
+            results.append({
+                'seed': args.seed,
+                'Accuracy': test_acc,
+                'Precision': test_precision,
+                'Recall': test_recall,
+                'F1': test_f1,
+                'AUCROC': test_rocauc,
+                'AUC-PR': test_aucpr,
+                'Recall@P80': recall_at_p80,
+                'Recall@P85': recall_at_p85,
+                'Recall@P90': recall_at_p90
+            })
+            # 生成表格
+            results_df = pd.DataFrame(results)
+            print(results_df.to_markdown(index=False))
+
+            # 保存结果到CSV
+            results_df.to_csv('SEBot_mgtab.csv', mode='a', header=not os.path.exists(f'SEBot_mgtab.csv'), index=False)
+
 
             self.test_results.append(
                 [test_acc, test_f1, test_recall, test_precision, test_aucpr, test_rocauc])
@@ -366,7 +428,7 @@ class Trainer(object):
         self.args.num_features = self.args.hidden_dim
 
         # path = './dataset/' + self.args.dataset + '/'
-        path = './MGTAB/'
+        path = '/dev/shm/mgtab/'
         edge_index = torch.load(path + 'edge_index.pt')
         edge_type = torch.load(path + 'edge_type.pt')
         self.args.num_relations = edge_type.max() + 1
@@ -498,13 +560,13 @@ if __name__ == '__main__':
     parser.add_argument('--pf', type=float, default=0.2)  # edge dropout ratee
 
     parser.add_argument('--seed', type=int, default=42, help='seed')
-    parser.add_argument('--batch_size', default=5000, type=int)
+    parser.add_argument('--batch_size', default=512, type=int)
     parser.add_argument('--lr', type=float, default=0.01)
     parser.add_argument('--weight_decay', type=float, default=3e-3)
     parser.add_argument("--dropout", type=float, default=0.3)
     parser.add_argument('--conv_dropout', type=float, default=0.3)
     parser.add_argument('--pooling_dropout', type=float, default=0.3)
-    parser.add_argument('--epochs', default=200, type=int)
+    parser.add_argument('--epochs', default=50, type=int)
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument('--patience', type=int, default=50)
     parser.add_argument(
@@ -512,8 +574,13 @@ if __name__ == '__main__':
         default=6)  # save top k models with best validation loss
 
     args = parser.parse_args()
-    args.device = torch.device(
-        "cuda:" + str(args.gpu) if torch.cuda.is_available() else "cpu")
+    # args.device = torch.device(
+    #     "cuda:" + str(args.gpu) if torch.cuda.is_available() else "cpu")
+    args.device = torch.device("cpu")
+    
+    global results
+    results = []
+
     trainer = Trainer(args)
     test_acc = trainer.train()
-    print('test_acc: ', test_acc)
+    
