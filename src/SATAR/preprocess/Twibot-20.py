@@ -10,13 +10,14 @@ import numpy as np
 from gensim.models import word2vec
 from nltk import tokenize
 
+import nltk
+nltk.download('punkt')
+
 parser = ArgumentParser()
 parser.add_argument('--dataset', type=str, default='Twibot-22')
 args = parser.parse_args()
 
 dataset = 'Twibot-20'
-if not osp.exists('tmp/{}'.format(dataset)):
-    os.makedirs('tmp/{}'.format(dataset))
 
 properties_segments = ['created_at', 'description', 'entities', 'location',
                        'pinned_tweet_id', 'profile_image_url', 'protected',
@@ -68,7 +69,7 @@ def get_properties():
                     user_property.append(calc_activate_days(prop.strip()))
             assert len(user_property) == 15
             properties.append(user_property)
-        json.dump(idx, open('tmp/{}/idx.json'.format(dataset), 'w'))
+        json.dump(idx, open(path+'tmp/{}/idx.json'.format(dataset), 'w'))
         properties = np.array(properties)
         for i in range(properties.shape[1]):
             if np.max(properties[:, i]) == np.min(properties[:, i]):
@@ -77,12 +78,12 @@ def get_properties():
             std = np.std(properties[:, i])
             properties[:, i] = (properties[:, i] - mean) / std
         print(properties.shape)
-        np.save('tmp/{}/properties.npy'.format(dataset), properties)
+        np.save(path+'tmp/{}/properties.npy'.format(dataset), properties)
 
 
 def get_neighbors():
     edge = pandas.read_csv(osp.join(path, 'edge.csv'), chunksize=10000000)
-    user_idx = json.load(open('tmp/{}/idx.json'.format(dataset)))
+    user_idx = json.load(open(path+'tmp/{}/idx.json'.format(dataset)))
     neighbors_index = {}
     for item in user_idx:
         neighbors_index[item] = {
@@ -100,11 +101,11 @@ def get_neighbors():
     neighbors = [neighbors_index[item] for item in user_idx]
     print(len(neighbors))
     neighbors = np.array(neighbors, dtype=object)
-    np.save('tmp/{}/neighbors.npy'.format(dataset), neighbors)
+    np.save(path+'tmp/{}/neighbors.npy'.format(dataset), neighbors)
 
 
 def get_tweet_corpus():
-    fb = open('tmp/{}/corpus.txt'.format(dataset), 'w')
+    fb = open(path+'tmp/{}/corpus.txt'.format(dataset), 'w')
     with open(osp.join(path, 'node.json')) as f:
         data = ijson.items(f, 'item')
         for item in tqdm(data, ncols=0):
@@ -117,15 +118,15 @@ def get_tweet_corpus():
 
 
 def get_word2vec_model():
-    sentences = word2vec.Text8Corpus('tmp/{}/corpus.txt'.format(dataset))
+    sentences = word2vec.Text8Corpus(path+'tmp/{}/corpus.txt'.format(dataset))
     print('training word2vec model')
     model = word2vec.Word2Vec(sentences, vector_size=128, workers=8, min_count=5)
     vectors = model.wv.vectors
     key_to_index = model.wv.key_to_index
     print(vectors.shape)
     print(len(key_to_index))
-    np.save('tmp/{}/vec.npy'.format(dataset), vectors)
-    json.dump(key_to_index, open('tmp/{}/key_to_index.json'.format(dataset), 'w'))
+    np.save(path+'tmp/{}/vec.npy'.format(dataset), vectors)
+    json.dump(key_to_index, open(path+'tmp/{}/key_to_index.json'.format(dataset), 'w'))
     print('training done')
 
 
@@ -137,8 +138,8 @@ def get_tweets():
             continue
         author_idx[item['target_id']] = item['source_id']
     print(len(edge))
-    key_to_index = json.load(open('tmp/{}/key_to_index.json'.format(dataset)))
-    user_idx = json.load(open('tmp/{}/idx.json'.format(dataset)))
+    key_to_index = json.load(open(path+'tmp/{}/key_to_index.json'.format(dataset)))
+    user_idx = json.load(open(path+'tmp/{}/idx.json'.format(dataset)))
     tweets_index = {}
     for user in user_idx:
         tweets_index[user] = []
@@ -159,12 +160,12 @@ def get_tweets():
             tweets_index[author_idx[item['id']]].append(tweet)
     tweets = [tweets_index[item] for item in user_idx]
     tweets = np.array(tweets, dtype=object)
-    np.save('tmp/{}/tweets.npy'.format(dataset), tweets)
+    np.save(path+'tmp/{}/tweets.npy'.format(dataset), tweets)
 
 
 def get_bot_labels():
-    user_idx = json.load(open('tmp/{}/idx.json'.format(dataset)))
-    label_data = pandas.read_csv('../../datasets/{}/label.csv'.format(dataset))
+    user_idx = json.load(open(path+'tmp/{}/idx.json'.format(dataset)))
+    label_data = pandas.read_csv(path+'label.csv')
     label_index = {}
     for index, item in tqdm(label_data.iterrows(), ncols=0):
         label_index[item['id']] = int(item['label'] == 'bot')
@@ -176,7 +177,7 @@ def get_bot_labels():
             bot_labels.append(2)
     bot_labels = np.array(bot_labels)
     print(bot_labels.shape)
-    np.save('tmp/{}/bot_labels.npy'.format(dataset), bot_labels)
+    np.save(path+'tmp/{}/bot_labels.npy'.format(dataset), bot_labels)
 
 
 def get_follower_labels():
@@ -210,15 +211,16 @@ def get_follower_labels():
             follower_labels.append(label)
     follower_labels = np.array(follower_labels)
     print(follower_labels.shape)
-    np.save('tmp/{}/follower_labels.npy'.format(dataset), follower_labels)
+    np.save(path+'tmp/{}/follower_labels.npy'.format(dataset), follower_labels)
 
 
 if __name__ == '__main__':
-    path = '../../datasets/{}'.format(dataset)
-    get_properties()
-    get_neighbors()
-    get_tweet_corpus()
-    get_word2vec_model()
+    path = '/dev/shm/twi20/data/'
+    
+    # get_properties()
+    # get_neighbors()
+    # get_tweet_corpus()
+    # get_word2vec_model()
     get_tweets()
     get_bot_labels()
     get_follower_labels()

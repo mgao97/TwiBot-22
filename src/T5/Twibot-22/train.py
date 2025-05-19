@@ -2,18 +2,33 @@ import os
 import numpy as np
 import pandas as pd
 import torch
-os.environ['CUDA_VISIBLE_DEVICE'] = '5'
+# os.environ['CUDA_VISIBLE_DEVICE'] = '5'
 import math
 from tqdm import tqdm
 from torch import nn
-from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, precision_score, recall_score
+from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, precision_score, recall_score, precision_recall_curve, auc
 from torch.utils.data import Dataset, DataLoader
 from pathlib import Path
 
+
+import argparse
+import os
+import pandas as pd
+import numpy as np
+
+# CUDA = 'cuda:6'
+device = 'cpu'
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--dataset', type=str, default='Twibot-22', help='Choose the dataset.')
+parser.add_argument('--seed', type=int, default=0, help='Random seed.')
+args = parser.parse_args()
+
 split = [[], [], []]
-path0 = Path('datasets/Twibot-22')
-split_list = pd.read_csv(path0 / 'split.csv')
-label = pd.read_csv(path0 / 'label.csv')
+path0 = '/dev/shm/twi22/data/'
+split_list = pd.read_csv(path0+'split.csv')
+label = pd.read_csv(path0+'label.csv')
 
 users_index_to_uid = list(label['id'])
 uid_to_users_index = {x : i for i, x in enumerate(users_index_to_uid)}
@@ -33,14 +48,15 @@ def eval(preds_auc, preds, labels):
 
             
 class Twibot20Dataset(Dataset):
-    def __init__(self, name, device='cuda:5'):
+    def __init__(self, name, device='cpu'):
         self.device = torch.device(device)
-        path1 = Path("data/twibot22/T5-tweet")
-        path2 = Path("src/RoBERTa/Twibot-22")
+        path1 = '/dev/shm/twi22/processed_data/'
+        path2 = '/dev/shm/twi22/data/'
         
-        tweets_tensor = torch.load(path1 / 'tweets_tensor.pt')
-        des_tensor = torch.load(path1 / 'des_tensor.pt')
-        label = 1 - torch.load(path2 / 'label_list.pt')
+        
+        tweets_tensor = torch.load(path2 +'tweets_tensor_t5.pt')
+        des_tensor = torch.load(path2+'des_tensor_t5.pt')
+        label = 1 - torch.load(path2+'label_list.pt')
         
         if name == 'train':
             self.tweet_feature = tweets_tensor[split[0]]
@@ -118,7 +134,7 @@ class RobertaTrianer:
                  optimizer=torch.optim.Adam,
                  weight_decay=1e-5,
                  lr=1e-4,
-                 device='cuda:5'):    
+                 device='cpu'):    
         self.epochs = epochs
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -193,28 +209,118 @@ class RobertaTrianer:
         labels = np.concatenate(labels, axis=0)
         
         eval(preds_auc, preds, labels)
-        
-    @torch.no_grad()
+    
     def test(self):
         self.model.eval()
         preds = []
+        probs = []
         preds_auc = []
         labels = []
+        acc = []
+        precision = []
+        recall = []
+        f1 = []
+        aucpr = []
+        results = []
+
         test_loader = self.test_loader
         for batch in test_loader:
-            tweet = batch[0].to(self.device)
-            des = batch[1].to(self.device)
-            label = batch[2].to(self.device)
-            pred = self.model(tweet, des)
+            pred = self.model(batch[0], batch[1])
+            prob = pred[:, 1].detach().cpu().numpy()
+
             preds.append(pred.argmax(dim=-1).cpu().numpy())
+            probs.append(prob)
+
+            acc.append(accuracy_score(batch[2].cpu().numpy(), pred.argmax(dim=-1).cpu().numpy()))
             preds_auc.append(pred[:,1].detach().cpu().numpy())
-            labels.append(label.cpu().numpy())
-            
-        preds = np.concatenate(preds, axis=0)
-        preds_auc = np.concatenate(preds_auc, axis=0)
-        labels = np.concatenate(labels, axis=0)
-        
+            labels.append(batch[2].cpu().numpy())
+            precision.append(precision_score(batch[2].cpu().numpy(), pred.argmax(dim=-1).cpu().numpy()))
+            recall.append(recall_score(batch[2].cpu().numpy(), pred.argmax(dim=-1).cpu().numpy()))
+            f1.append(f1_score(batch[2].cpu().numpy(), pred.argmax(dim=-1).cpu().numpy()))
+            aucpr.append(roc_auc_score(batch[2].cpu().numpy(), pred[:,1].detach().cpu().numpy()))
+
+            # precision1, recall1, thresholds = precision_recall_curve(batch[2].cpu().numpy(), probs)
+            # aucpr.append(auc(recall1, precision1))
+
+        # 把所有batch的标签和概率拼接成一个整体
+        all_labels = np.concatenate(labels)
+        all_probs = np.concatenate(probs)
+
+        precision1, recall1, thresholds = precision_recall_curve(all_labels, all_probs)
+        aucpr.append(auc(recall1, precision1))
+
+        # 计算精确率为80%时的召回率
+        recall_at_p80 = 0
+        for pi, ri in zip(precision1, recall1):
+            if pi >= 0.8:
+                recall_at_p80 = ri
+                break
+
+        # 计算精确率为85%时的召回率
+        recall_at_p85 = 0
+        for pi, ri in zip(precision1, recall1):
+            if pi >= 0.85:
+                recall_at_p85 = ri
+                break
+
+        # 计算精确率为90%时的召回率
+        recall_at_p90 = 0
+        for pi, ri in zip(precision1, recall1):
+            if pi >= 0.9:
+                recall_at_p90 = ri
+                break
+
+
+        acc = np.mean(acc)
+        precision = np.mean(precision)
+        recall = np.mean(recall)
+        f1 = np.mean(f1)
+        aucpr = np.mean(aucpr)
+        preds_auc = np.concatenate(preds_auc)
+        preds = np.concatenate(preds)
+
+
+                # 记录结果
+        results.append({
+            'seed': args.seed,
+            'Accuracy': acc,
+            'Precision': precision,
+            'Recall': recall,
+            'F1': f1,
+            'AUCROC': np.mean(preds_auc),
+            'AUC-PR': aucpr,
+            'Recall@P80': recall_at_p80,
+            'Recall@P85': recall_at_p85,
+            'Recall@P90': recall_at_p90
+        })
+        # 生成表格
+        results_df = pd.DataFrame(results)
+        print(results_df.to_markdown(index=False))
+
+        # 保存结果到CSV
+        results_df.to_csv('T5_twi22.csv', mode='a', header=not os.path.exists(f'T5_twi22.csv'), index=False)
         eval(preds_auc, preds, labels)
+    # @torch.no_grad()
+    # def test(self):
+    #     self.model.eval()
+    #     preds = []
+    #     preds_auc = []
+    #     labels = []
+    #     test_loader = self.test_loader
+    #     for batch in test_loader:
+    #         tweet = batch[0].to(self.device)
+    #         des = batch[1].to(self.device)
+    #         label = batch[2].to(self.device)
+    #         pred = self.model(tweet, des)
+    #         preds.append(pred.argmax(dim=-1).cpu().numpy())
+    #         preds_auc.append(pred[:,1].detach().cpu().numpy())
+    #         labels.append(label.cpu().numpy())
+            
+    #     preds = np.concatenate(preds, axis=0)
+    #     preds_auc = np.concatenate(preds_auc, axis=0)
+    #     labels = np.concatenate(labels, axis=0)
+        
+    #     eval(preds_auc, preds, labels)
   
      
         
@@ -231,6 +337,6 @@ if __name__ == '__main__':
     val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
     
-    for i in range(5):
-        trainer = RobertaTrianer(train_loader, val_loader, test_loader)
-        trainer.train()
+    # for i in range(5):
+    trainer = RobertaTrianer(train_loader, val_loader, test_loader)
+    trainer.train()

@@ -42,7 +42,7 @@ class MGATBDataset(Dataset):
 # 构造数据集
 dataset = MGATBDataset(features, labels)
 num_total = len(dataset)
-num_train = int(0.6 * num_total)
+num_train = int(0.7 * num_total)
 num_val = int(0.2 * num_total)
 num_test = num_total - num_train - num_val
 
@@ -119,7 +119,7 @@ for epoch in range(args.epochs):
         total_loss += loss.item()
 
     print(f"\n[Epoch {epoch}] Loss: {total_loss / len(train_loader):.4f}")
-    acc, f1, auc_roc, precision, recall, auc_pr = evaluate(model, val_loader)
+    acc, f1, auc_roc, precision, recall, auc_pr, recall_at_p80, recall_at_p85, recall_at_p90 = evaluate(model, val_loader)
     print(f"[Validation] ACC: {acc:.4f}, F1: {f1:.4f}, ROC-AUC: {auc_roc:.4f}, PR-AUC: {auc_pr:.4f}")
 
 # === 测试 ===

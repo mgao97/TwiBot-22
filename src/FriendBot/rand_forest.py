@@ -123,7 +123,7 @@ aucroc_list = []
 aucpr_list = []
 results = []
 
-for seed in (97, 815, 1149, 945371, 123456):
+for seed in (97, 815, 1149): #, 945371, 123456):
     print(f"Random seed: {seed}")
     clf = RandomForestClassifier(oob_score=True, bootstrap=True, random_state=seed)
     clf.fit(X[train_set], y[train_set])
