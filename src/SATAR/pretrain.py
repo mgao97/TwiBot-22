@@ -49,11 +49,11 @@ max_tweet_length = args.max_tweet_length
 
 begin_time = time.time()
 data = {
-    'tweets': np.load('{}/tweets.npy'.format(path), allow_pickle=True),
-    'properties': np.load('{}/properties.npy'.format(path)),
+    'tweets': np.load('/dev/shm/twi20/processed_data/tweets.npy', allow_pickle=True),
+    'properties': np.load('{}/properties.npy'),
     'neighbor_reps': np.zeros((dataset_size[dataset_name], n_hidden * 2)),
-    'bot_labels': np.load('{}/bot_labels.npy'.format(path)),
-    'follower_labels': np.load('{}/follower_labels.npy'.format(path))
+    'bot_labels': np.load('{}/bot_labels.npy'),
+    'follower_labels': np.load('{}/follower_labels.npy')
 }
 
 word_vec = np.load('{}/vec.npy'.format(path))

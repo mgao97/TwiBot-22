@@ -33,10 +33,10 @@ def get_train_data(dataset_name):
     # path = '../../BotRGCN/{}/processed_data'.format(data_index[dataset_name])
     # if not osp.exists(path):
     #     raise KeyError
-    path = '/dev/shm/twi20/processed_data'
+    path = '/dev/shm/twi22/processed_data'
     labels = torch.load(osp.join(path, 'label.pt'))
-    des_embedding = torch.load(osp.join(path, 'des_tensor.pt'))
-    tweet_embedding = torch.load(osp.join(path, 'tweets_tensor.pt'))
+    des_embedding = torch.load(osp.join(path, 'user_des_feats.pt'))
+    tweet_embedding = torch.load(osp.join(path, 'user_tweet_feats.pt'))
     # des_embedding = torch.load(osp.join(path, 'user_des_feats1.pt'))
     # tweet_embedding = torch.load(osp.join(path, 'user_tweet_feats.pt'))
     num_property_embedding = torch.load(osp.join(path, 'num_properties_tensor.pt'))

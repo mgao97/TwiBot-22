@@ -13,13 +13,13 @@ import numpy as np
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 parser = ArgumentParser()
-parser.add_argument('--dataset', type=str, default='Twibot-20')
+parser.add_argument('--dataset', type=str, default='Twibot-22')
 parser.add_argument('--mode', type=str, default='GAT')
 parser.add_argument('--visible', type=bool, default=False)
 parser.add_argument('--hidden_dim', type=int, default=128)
 parser.add_argument('--max_epoch', type=int, default=50)
-parser.add_argument('--batch_size', type=int, default=128)
-parser.add_argument('--no_up', type=int, default=10)
+parser.add_argument('--batch_size', type=int, default=256)
+parser.add_argument('--no_up', type=int, default=5)
 parser.add_argument('--lr', type=float, default=1e-4)
 parser.add_argument('--weight_decay', type=float, default=1e-5)
 parser.add_argument('--dropout', type=float, default=0.3)
@@ -117,16 +117,16 @@ def validation(epoch, name, model, loss_fn, loader):
 def train():
     print(data)
     train_loader = NeighborLoader(data,
-                                  num_neighbors=[256] * 4,
+                                  num_neighbors=[64] * 4,
                                   batch_size=batch_size,
                                   input_nodes=data.train_idx,
                                   shuffle=True)
     val_loader = NeighborLoader(data,
-                                num_neighbors=[256] * 4,
+                                num_neighbors=[64] * 4,
                                 batch_size=batch_size,
                                 input_nodes=data.val_idx)
     test_loader = NeighborLoader(data,
-                                 num_neighbors=[256] * 4,
+                                 num_neighbors=[64] * 4,
                                  batch_size=batch_size,
                                  input_nodes=data.test_idx)
     if mode == 'GAT':
