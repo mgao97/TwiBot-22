@@ -13,6 +13,7 @@ from torch_geometric.data import HeteroData
 import os
 import pandas as pd
 import numpy as np
+from sklearn.utils import shuffle
 
 def load_data(args):
     
@@ -36,9 +37,15 @@ def load_data(args):
     data["user", "following", "user"].edge_index = edge_index[:, edge_type==1]
     
     print("loading index...")
-    data.train_idx = torch.load(args.path + "train_idx.pt", map_location="cpu")
-    data.valid_idx = torch.load(args.path + "val_idx.pt", map_location="cpu")
-    data.test_idx = torch.load(args.path + "test_idx.pt", map_location="cpu")
+    node_num = x.shape[0]
+    sample_idx = shuffle(np.array(range(node_num)),
+                                 random_state=args.seed)
+    data.train_idx = sample_idx[:int(0.7 * node_num)]
+    data.valid_idx = sample_idx[int(0.7 * node_num):int(0.9 * node_num)]
+    data.test_idx = sample_idx[int(0.9 * node_num):]
+    # data.train_idx = torch.load(args.path + "train_idx.pt", map_location="cpu")
+    # data.valid_idx = torch.load(args.path + "val_idx.pt", map_location="cpu")
+    # data.test_idx = torch.load(args.path + "test_idx.pt", map_location="cpu")
     
     return data
 
@@ -87,7 +94,7 @@ class HGTDetector(pl.LightningModule):
         # tweet_features = train_batch["user"].x[:, args.cat_num+args.numeric_num: args.cat_num+args.numeric_num+args.tweet_channel]
         # des_features = train_batch["user"].x[:, args.cat_num+args.numeric_num+args.tweet_channel: args.cat_num+args.numeric_num+args.tweet_channel+args.des_channel]
         
-        user_features = train_batch.x
+        user_features = train_batch["user"].x
         label = train_batch["user"].y
         # user_features_numeric = self.drop(self.ReLU(self.in_linear_numeric(prop_features)))
         # user_features_bool = self.drop(self.ReLU(self.in_linear_bool(cat_features)))
@@ -116,7 +123,7 @@ class HGTDetector(pl.LightningModule):
             # tweet_features = val_batch["user"].x[:, args.cat_num+args.numeric_num: args.cat_num+args.numeric_num+args.tweet_channel]
             # des_features = val_batch["user"].x[:, args.cat_num+args.numeric_num+args.tweet_channel: args.cat_num+args.numeric_num+args.tweet_channel+args.des_channel]
 
-            user_features = val_batch.x
+            user_features = val_batch["user"].x
             label = val_batch["user"].y
             # user_features_numeric = self.drop(self.ReLU(self.in_linear_numeric(prop_features)))
             # user_features_bool = self.drop(self.ReLU(self.in_linear_bool(cat_features)))
@@ -153,7 +160,7 @@ class HGTDetector(pl.LightningModule):
             # tweet_features = test_batch["user"].x[:, args.cat_num+args.numeric_num: args.cat_num+args.numeric_num+args.tweet_channel]
             # des_features = test_batch["user"].x[:, args.cat_num+args.numeric_num+args.tweet_channel: args.cat_num+args.numeric_num+args.tweet_channel+args.des_channel]
 
-            user_features = test_batch.x
+            user_features = test_batch["user"].x
             label = test_batch["user"].y[:args.test_batch_size]
             # user_features_numeric = self.drop(self.ReLU(self.in_linear_numeric(prop_features)))
             # user_features_bool = self.drop(self.ReLU(self.in_linear_bool(cat_features)))
@@ -332,11 +339,13 @@ if __name__ == "__main__":
     model = HGTDetector(args)
     trainer = pl.Trainer(num_nodes=1, max_epochs=args.epochs, precision=16, log_every_n_steps=1, callbacks=[checkpoint_callback, early_stop_callback])
     
-    trainer.fit(model, train_loader, valid_loader)
+    # trainer.fit(model, train_loader, valid_loader,ckpt_path='./lightning_logs/version_0/checkpoints/val_acc=0.9293.ckpt')
+    # trainer.fit(model, train_loader, valid_loader,ckpt_path='./lightning_logs/version_1/checkpoints/val_acc=0.9524.ckpt')
 
 
-    dir = './lightning_logs/hgt/version_{}/checkpoints/'.format(trainer.logger.version)
-    best_path = './lightning_logs/hgt/version_{}/checkpoints/{}'.format(trainer.logger.version, listdir(dir)[0])
+    # dir = './lightning_logs/version_{}/checkpoints/'.format(trainer.logger.version)
+    # best_path = './lightning_logs/version_{}/checkpoints/{}'.format(trainer.logger.version, listdir(dir)[0])
+    best_path = './lightning_logs/version_0/checkpoints/val_acc=0.9293.ckpt'
 
     best_model = HGTDetector.load_from_checkpoint(checkpoint_path=best_path, args=args)
     trainer.test(best_model, test_loader, verbose=True)

@@ -39,7 +39,7 @@ class BotGAT(nn.Module):
         self.gat2 = GATConv(hidden_dim, hidden_dim)
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, des, tweet, num_prop, cat_prop, edge_index, edge_type=None):
+    def forward(self, des, tweet, num_prop, cat_prop, edge_index, edge_type=None, return_embedding=False):
         d = self.linear_relu_des(des)
         t = self.linear_relu_tweet(tweet)
         n = self.linear_relu_num_prop(num_prop)
@@ -51,8 +51,13 @@ class BotGAT(nn.Module):
         x = self.dropout(x)
         x = self.gat2(x, edge_index)
         x = self.linear_relu_output1(x)
-        x = self.linear_output2(x)
-        return x
+        if return_embedding:
+            output = self.linear_output2(x)
+            return output, x  # 返回预测结果和embedding
+        else:
+            return self.linear_output2(x)  # 只返回预测结果
+        # x = self.linear_output2(x)
+        # return x
 
 
 class BotGCN(nn.Module):

@@ -27,15 +27,15 @@ echo "实验1完成"
 # nohup python SimpleHGN_sample.py --seed $SEED3 > logs/simhgn_seed_${SEED3}.log 2>&1 &
 # echo "实验3完成"
 
-# # 运行第四个实验
-# echo "开始运行实验4，种子值: $SEED4"
-# nohup python SimpleHGN_sample.py --seed $SEED4 > logs/simhgn_seed_${SEED4}.log 2>&1 &
-# echo "实验4完成"
+# 运行第四个实验
+echo "开始运行实验4，种子值: $SEED4"
+nohup python SimpleHGN_sample.py --seed $SEED4 > logs/simhgn_seed_${SEED4}.log 2>&1 &
+echo "实验4完成"
 
-# # 运行第三个实验
-# echo "开始运行实验5，种子值: $SEED5"
-# nohup python SimpleHGN_sample.py --seed $SEED5 > logs/simhgn_seed_${SEED5}.log 2>&1 &
-# echo "实验5完成"
+# 运行第三个实验
+echo "开始运行实验5，种子值: $SEED5"
+nohup python SimpleHGN_sample.py --seed $SEED5 > logs/simhgn_seed_${SEED5}.log 2>&1 &
+echo "实验5完成"
 
 echo "所有实验已完成，结果已保存到res目录"
 echo "日志文件已保存到logs目录"

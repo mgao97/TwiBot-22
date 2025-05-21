@@ -130,6 +130,7 @@ class HGTDetector(pl.LightningModule):
             x_dict = self.HGT_layer2(x_dict, edge_index_dict)
 
             user_features = self.drop(self.ReLU(self.out1(x_dict["user"])))
+            torch.save(user_features[test_batch], "HGT_twi20_embedding.pt")
             pred = self.out2(user_features[test_batch])
             pred_binary = torch.argmax(pred, dim=1)
 
@@ -272,11 +273,11 @@ if __name__ == "__main__":
     model = HGTDetector(args)
     trainer = pl.Trainer(num_nodes=1, max_epochs=args.epochs, precision=16, log_every_n_steps=1, callbacks=[checkpoint_callback])
     
-    trainer.fit(model, train_loader, valid_loader)
+    # trainer.fit(model, train_loader, valid_loader)
 
-    dir = './hgt/lightning_logs/version_{}/checkpoints/'.format(trainer.logger.version)
-    best_path = './hgt/lightning_logs/version_{}/checkpoints/{}'.format(trainer.logger.version, listdir(dir)[0])
-    # best_path = './hgt/lightning_logs/version_0/checkpoints/val_acc=0.8719.ckpt'
+    # dir = './hgt/lightning_logs/version_{}/checkpoints/'.format(trainer.logger.version)
+    # best_path = './hgt/lightning_logs/version_{}/checkpoints/{}'.format(trainer.logger.version, listdir(dir)[0])
+    best_path = './hgt/lightning_logs/version_0/checkpoints/val_acc=0.8719.ckpt'
 
     best_model = HGTDetector.load_from_checkpoint(checkpoint_path=best_path, args=args)
     trainer.test(best_model, test_loader, verbose=True)

@@ -333,11 +333,11 @@ if __name__ == "__main__":
     model = SHGNDetector(args)
     trainer = pl.Trainer(num_nodes=1, max_epochs=args.epochs, precision=16, log_every_n_steps=1, callbacks=[checkpoint_callback,early_stop_callback])
     
-    trainer.fit(model, train_loader, valid_loader, ckpt_path='./lightning_logs/version_0/checkpoints/val_acc=0.9033.ckpt')
+    # trainer.fit(model, train_loader, valid_loader, ckpt_path='./lightning_logs/version_0/checkpoints/val_acc=0.9033.ckpt')
 
-    dir = './lightning_logs/version_{}/checkpoints/'.format(trainer.logger.version)
-    best_path = './lightning_logs/version_{}/checkpoints/{}'.format(trainer.logger.version, listdir(dir)[0])
-
+    # dir = './lightning_logs/version_{}/checkpoints/'.format(trainer.logger.version)
+    # best_path = './lightning_logs/version_{}/checkpoints/{}'.format(trainer.logger.version, listdir(dir)[0])
+    best_path = './lightning_logs/version_0/checkpoints/val_acc=0.9033.ckpt'
     best_model = SHGNDetector.load_from_checkpoint(checkpoint_path=best_path, args=args)
     trainer.test(best_model, test_loader, verbose=True)
     

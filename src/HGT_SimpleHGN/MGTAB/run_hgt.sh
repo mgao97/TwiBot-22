@@ -6,16 +6,17 @@ SEED2=815
 SEED3=1149
 SEED4=945371
 SEED5=123456
+SEED6=97
 
 # 确保输出目录存在
 mkdir -p model
 mkdir -p res
 mkdir -p logs
 
-# 运行第一个实验
-echo "开始运行实验1，种子值: $SEED1"
-nohup python HGT_sample.py --seed $SEED1 > tee logs/hgt_seed_${SEED1}.log 2>&1 &
-echo "实验1完成"
+# # 运行第一个实验
+# echo "开始运行实验1，种子值: $SEED1"
+# nohup python HGT_sample.py --seed $SEED1 > tee logs/hgt_seed_${SEED1}.log 2>&1 &
+# echo "实验1完成"
 
 # # 运行第二个实验
 # echo "开始运行实验2，种子值: $SEED2"
@@ -39,3 +40,9 @@ echo "实验1完成"
 
 # echo "所有实验已完成，结果已保存到res目录"
 # echo "日志文件已保存到logs目录"
+
+
+# 运行第二个实验
+echo "开始运行实验6，种子值: $SEED6"
+nohup python HGT_sample.py --seed $SEED6 2>&1 | tee logs/hgt_seed_${SEED6}.log
+echo "实验2完成"
