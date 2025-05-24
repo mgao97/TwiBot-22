@@ -23,7 +23,7 @@ from dhg.nn import HGNNConv,UniGINConv, UniSAGEConv
 from mulltiattn import MultiAttnModel
 
 import numpy as np
-from Twi20 import Twi20Dataset
+from Twi22 import Twi22Dataset
 
 import os
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -55,9 +55,9 @@ def relabel_edges(edge_index):
 def load_data(args):
     print("loading features...")
     num = torch.load(args.path + 'num_properties_tensor.pt', map_location="cpu")
-    tweet = torch.load(args.path + "tweets_tensor.pt", map_location="cpu")
+    tweet = torch.load(args.path + "user_tweet_feats.pt", map_location="cpu")
     cat = torch.load(args.path + 'cat_properties_tensor.pt', map_location="cpu")
-    des = torch.load(args.path + 'des_tensor.pt', map_location="cpu")
+    des = torch.load(args.path + 'user_des_feats.pt', map_location="cpu")
     # print(type(num),type(cat),type(des),type(tweet))
     x = torch.cat([num, cat,des,tweet],dim=1)
     print('x.shape:',x.shape)
@@ -222,20 +222,11 @@ class BotHybrid(pl.LightningModule):
             fused_x = self.relu(fused_x)
 
             pred=self.linear_output2(fused_x)
-
-            num_target_nodes = label.size(0)
-            pred_target = pred[:num_target_nodes]
-
-            loss = self.CELoss(pred_target, label)
-            pred_binary = torch.argmax(pred_target, dim=1)
+            loss = self.CELoss(pred, label)
+            pred_binary = torch.argmax(pred, dim=1)
 
             acc = accuracy_score(label.cpu(), pred_binary.cpu())
             f1 = f1_score(label.cpu(), pred_binary.cpu())
-            # loss = self.CELoss(pred, label)
-            # pred_binary = torch.argmax(pred, dim=1)
-
-            # acc = accuracy_score(label.cpu(), pred_binary.cpu())
-            # f1 = f1_score(label.cpu(), pred_binary.cpu())
             # rocauc = roc_auc_score(label.cpu(), pred[:,1].cpu())
             
             self.log("val_acc", acc, prog_bar=True, batch_size=label.size(0))
@@ -266,16 +257,6 @@ class BotHybrid(pl.LightningModule):
             x_high=self.HGNN_layer2(x,hg)
 
             fused_low, fused_high = self.multiattn(x_low.unsqueeze(1), x_high.unsqueeze(1))
-
-            # Access attention weights
-            low_to_high_attention = self.multiattn.attention_weights['low_to_high']
-            high_to_low_attention = self.multiattn.attention_weights['high_to_low']
-
-            # Save attention weights
-            torch.save({
-                'low_to_high': low_to_high_attention,
-                'high_to_low': high_to_low_attention
-            }, 'attention_weights.pt')
 
             fused_x = torch.cat((fused_low.squeeze(1),fused_high.squeeze(1)),dim=-1)
 
@@ -357,7 +338,7 @@ class BotHybrid(pl.LightningModule):
             print(results_df.to_markdown(index=False))
 
             # 保存结果到CSV
-            results_df.to_csv('HyperScan_twi22.csv', mode='a', header=not os.path.exists(f'HyperScan_twi22.csv'), index=False)
+            results_df.to_csv('HyperScan_twi22_new.csv', mode='a', header=not os.path.exists(f'HyperScan_twi22_new.csv'), index=False)
 
             
             # pred_test.append(pred_binary.squeeze().cpu())
@@ -391,23 +372,47 @@ class BotHybrid(pl.LightningModule):
             gc.collect()
 
 
+    # def configure_optimizers(self):
+    #     optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.l2_reg, amsgrad=False)
+    #     scheduler = CosineAnnealingLR(optimizer, T_max=16, eta_min=0)
+    #     return {
+    #         "optimizer": optimizer,
+    #         "lr_scheduler": {
+    #             "scheduler": scheduler
+    #         },
+    #     }
+    
+    # 优化 5: 配置训练器以适应 CPU
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.l2_reg, amsgrad=False)
-        scheduler = CosineAnnealingLR(optimizer, T_max=16, eta_min=0)
+        # 使用内存效率更高的优化器
+        optimizer = torch.optim.AdamW(
+            self.parameters(), 
+            lr=self.lr,
+            weight_decay=self.l2_reg,
+            eps=1e-8
+        )
+        
+        # 使用 CPU 友好的学习率调度器
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, 
+            mode='min', 
+            factor=0.5, 
+            patience=5,
+            min_lr=1e-6
+        )
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
-                "scheduler": scheduler
+                "scheduler": scheduler,
+                "monitor": "val_loss",
             },
         }
-    
-    
 
 
 
 
 parser = argparse.ArgumentParser(description="HyperScan")
-parser.add_argument("--path", type=str, default="/dev/shm/twi20/processed_data/", help="dataset path")
+parser.add_argument("--path", type=str, default="/dev/shm/twi22/processed_data/", help="dataset path")
 parser.add_argument("--numeric_num", type=int, default=10, help="dataset path")
 parser.add_argument("--linear_channels", type=int, default=128, help="linear channels")
 parser.add_argument("--cat_num", type=int, default=10, help="catgorical features")
@@ -418,7 +423,7 @@ parser.add_argument("--out_channel", type=int, default=128, help="description ch
 parser.add_argument("--dropout", type=float, default=0.5, help="description channel")
 parser.add_argument("--trans_head", type=int, default=2, help="description channel")
 parser.add_argument("--semantic_head", type=int, default=2, help="description channel")
-parser.add_argument("--batch_size", type=int, default=512, help="description channel")
+parser.add_argument("--batch_size", type=int, default=4096, help="description channel")
 parser.add_argument("--epochs", type=int, default=10, help="description channel")
 parser.add_argument("--lr", type=float, default=0.001, help="description channel")
 parser.add_argument("--l2_reg", type=float, default=1e-5, help="description channel")
@@ -481,7 +486,7 @@ if __name__ == "__main__":
     # trainer.fit(model, train_loader, valid_loader)
     # dir = './lightning_logs/version_{}/checkpoints/'.format(trainer.logger.version)
     # best_path = './lightning_logs/version_{}/checkpoints/{}'.format(trainer.logger.version, listdir(dir)[0])
-    # best_path = './lightning_logs/version_/checkpoints/{}'
+    best_path = './lightning_logs/version_0/checkpoints/val_acc=0.9568.ckpt'
     best_model = BotHybrid.load_from_checkpoint(checkpoint_path=best_path, args=args,strict=False)
     trainer.test(best_model, test_loader, verbose=True)
     

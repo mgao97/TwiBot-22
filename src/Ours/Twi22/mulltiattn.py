@@ -8,50 +8,33 @@ import torch.nn.functional as F
 '''
 Bidirectional cross-attention layers.
 '''
-# class BidirectionalCrossAttention(nn.Module):
-
-#     def __init__(self, model_dim, Q_dim, K_dim, V_dim):
-#         super().__init__()
-
-#         self.query_matrix = nn.Linear(model_dim, Q_dim)
-#         self.key_matrix = nn.Linear(model_dim, K_dim)
-#         self.value_matrix = nn.Linear(model_dim, V_dim)
-    
-
-#     def bidirectional_scaled_dot_product_attention(self, Q, K, V):
-#         score = torch.bmm(Q, K.transpose(-1, -2))
-#         scaled_score = score / (K.shape[-1]**0.5)
-#         attention = torch.bmm(F.softmax(scaled_score, dim = -1), V)
-
-#         return attention
-    
-
-    # def forward(self, query, key, value):
-    #     Q = self.query_matrix(query)
-    #     K = self.key_matrix(key)
-    #     V = self.value_matrix(value)
-    #     attention = self.bidirectional_scaled_dot_product_attention(Q, K, V)
-
-        
-
-    #     return attention
-
 class BidirectionalCrossAttention(nn.Module):
+
+    def __init__(self, model_dim, Q_dim, K_dim, V_dim):
+        super().__init__()
+
+        self.query_matrix = nn.Linear(model_dim, Q_dim)
+        self.key_matrix = nn.Linear(model_dim, K_dim)
+        self.value_matrix = nn.Linear(model_dim, V_dim)
+    
+
     def bidirectional_scaled_dot_product_attention(self, Q, K, V):
         score = torch.bmm(Q, K.transpose(-1, -2))
         scaled_score = score / (K.shape[-1]**0.5)
-        attention_weights = F.softmax(scaled_score, dim=-1)
-        attention = torch.bmm(attention_weights, V)
-        
-        return attention, attention_weights
+        attention = torch.bmm(F.softmax(scaled_score, dim = -1), V)
+
+        return attention
+    
 
     def forward(self, query, key, value):
         Q = self.query_matrix(query)
         K = self.key_matrix(key)
         V = self.value_matrix(value)
-        attention, attention_weights = self.bidirectional_scaled_dot_product_attention(Q, K, V)
-        
-        return attention, attention_weights
+        attention = self.bidirectional_scaled_dot_product_attention(Q, K, V)
+
+        return attention
+
+
 
 '''
 Multi-head bidirectional cross-attention layers.
@@ -137,16 +120,11 @@ class MultiAttnLayer(nn.Module):
 
 
     def forward(self, query_modality, modality_A):
-        # attn_output_1 = self.add_norm_1(query_modality, lambda query_modality: self.attn_1(query_modality, modality_A, modality_A))
+        attn_output_1 = self.add_norm_1(query_modality, lambda query_modality: self.attn_1(query_modality, modality_A, modality_A))
         
-
-        # Get attention weights from multi-head attention
-        attn_output_1, attn_weights = self.attn_1(query_modality, modality_A, modality_A)
-        attn_output_1 = self.add_norm_1(query_modality, lambda x: attn_output_1)
-
         ff_output = self.add_norm_2(attn_output_1, self.ff)
 
-        return ff_output, attn_weights
+        return ff_output
 
 
 
@@ -163,12 +141,8 @@ class MultiAttn(nn.Module):
 
 
     def forward(self, query_modality, modality_A):
-        self.layer_attention_weights = []
-
         for multiattn_layer in self.multiattn_layers:
-            # query_modality = multiattn_layer(query_modality, modality_A)
-            query_modality, attn_weights = multiattn_layer(query_modality, modality_A)
-            self.layer_attention_weights.append(attn_weights)
+            query_modality = multiattn_layer(query_modality, modality_A)
         
         return query_modality
 
@@ -185,17 +159,8 @@ class MultiAttnModel(nn.Module):
 
     
     def forward(self, low_features, high_features):
-
         f_l = self.multiattn_low(low_features, high_features)
         f_h = self.multiattn_high(high_features, low_features)
-
-        # Store attention weights
-        self.attention_weights = {
-            'low_to_high': [],
-            'high_to_low': []
-        }
-        self.attention_weights['low_to_high'] = self.multiattn_low.layer_attention_weights
-        self.attention_weights['high_to_low'] = self.multiattn_high.layer_attention_weights
         
 
         return f_l, f_h

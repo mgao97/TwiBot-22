@@ -190,51 +190,55 @@ path1 = '/dev/shm/twi20/processed_data/'
 user, tweet = fast_merge("Twibot-20", '209')
 
 user_index_to_uid = list(user.id)
-tweet_index_to_tid = list(tweet.id)
+# tweet_index_to_tid = list(tweet.id)
         
 uid_to_user_index = {x : i for i, x in enumerate(user_index_to_uid)}
-tid_to_tweet_index = {x : i for i, x in enumerate(tweet_index_to_tid)}
+# tid_to_tweet_index = {x : i for i, x in enumerate(tweet_index_to_tid)}
 
-edge=pd.read_csv("/dev/shm/twi20/data/edge.csv")
-print('edge shape:',edge.shape)
-print(edge['relation'].unique())
+# edge=pd.read_csv("/dev/shm/twi20/data/edge.csv")
+# print('edge shape:',edge.shape)
+# print(edge['relation'].unique())
 
-edge=edge[edge.relation=='post']
+# edge=edge[edge.relation=='post']
 
-print('edge shape:',edge.shape)
-print(edge.head(),edge.shape)
+# print('edge shape:',edge.shape)
+# print(edge.head(),edge.shape)
 
-src = list(edge[edge["relation"] == 'post']["source_id"])
-dst = list(edge[edge["relation"] == 'post']["target_id"])
+# src = list(edge[edge["relation"] == 'post']["source_id"])
+# dst = list(edge[edge["relation"] == 'post']["target_id"])
 
-new_src = []
-new_dst = []
+# new_src = []
+# new_dst = []
             
-for s, t in tqdm(zip(src, dst)):
-    new_src.append(s)
-    new_dst.append(t)
+# for s, t in tqdm(zip(src, dst)):
+#     new_src.append(s)
+#     new_dst.append(t)
                 
-src = new_src
-dst = new_dst
+# src = new_src
+# dst = new_dst
             
-src = list(map(lambda x: uid_to_user_index[x], src))
-dst = list(map(lambda x: tid_to_tweet_index[x], dst))
+# src = list(map(lambda x: uid_to_user_index[x], src))
+# dst = list(map(lambda x: tid_to_tweet_index[x], dst))
 
-edge['target_id']=list(map(lambda x:tid_to_tweet_index[x],edge['target_id'].values))
+# edge['target_id']=list(map(lambda x:tid_to_tweet_index[x],edge['target_id'].values))
 
-edge['source_id']=list(map(lambda x:uid_to_user_index[x],edge['source_id'].values))
+# edge['source_id']=list(map(lambda x:uid_to_user_index[x],edge['source_id'].values))
 
-print('edge shape:',edge.shape)
-print(edge.head(),edge.shape)
+# print('edge shape:',edge.shape)
+# print(edge.head(),edge.shape)
 
-dict={i:[] for i in range(len(user))}
-for i in tqdm(range(len(edge))):
-    try:
-        edge.iloc[i]['source_id']
-    except KeyError:
-        continue
-    else:
-        dict[edge.iloc[i]['source_id']].append(edge.iloc[i]['target_id'])
+# dict={i:[] for i in range(len(user))}
+# for i in tqdm(range(len(edge))):
+#     try:
+#         edge.iloc[i]['source_id']
+#     except KeyError:
+#         continue
+#     else:
+#         dict[edge.iloc[i]['source_id']].append(edge.iloc[i]['target_id'])
 
-np.save(path1+'each_user_tweets.npy',dict)
-print('each_user_tweets shape:',len(dict))
+# np.save(path1+'each_user_tweets.npy',dict)
+# print('each_user_tweets shape:',len(dict))
+
+
+node_index = uid_to_user_index['u1300588590469058560']
+print('node_index:',node_idx)

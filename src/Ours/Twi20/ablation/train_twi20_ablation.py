@@ -267,16 +267,6 @@ class BotHybrid(pl.LightningModule):
 
             fused_low, fused_high = self.multiattn(x_low.unsqueeze(1), x_high.unsqueeze(1))
 
-            # Access attention weights
-            low_to_high_attention = self.multiattn.attention_weights['low_to_high']
-            high_to_low_attention = self.multiattn.attention_weights['high_to_low']
-
-            # Save attention weights
-            torch.save({
-                'low_to_high': low_to_high_attention,
-                'high_to_low': high_to_low_attention
-            }, 'attention_weights.pt')
-
             fused_x = torch.cat((fused_low.squeeze(1),fused_high.squeeze(1)),dim=-1)
 
             fused_x = self.relu(fused_x)
@@ -478,10 +468,9 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(num_nodes=1, max_epochs=args.epochs, precision=32, log_every_n_steps=1,
                         callbacks=[early_stop_callback,checkpoint_callback])
-    # trainer.fit(model, train_loader, valid_loader)
-    # dir = './lightning_logs/version_{}/checkpoints/'.format(trainer.logger.version)
-    # best_path = './lightning_logs/version_{}/checkpoints/{}'.format(trainer.logger.version, listdir(dir)[0])
-    # best_path = './lightning_logs/version_/checkpoints/{}'
+    trainer.fit(model, train_loader, valid_loader)
+    dir = './lightning_logs/version_{}/checkpoints/'.format(trainer.logger.version)
+    best_path = './lightning_logs/version_{}/checkpoints/{}'.format(trainer.logger.version, listdir(dir)[0])
     best_model = BotHybrid.load_from_checkpoint(checkpoint_path=best_path, args=args,strict=False)
     trainer.test(best_model, test_loader, verbose=True)
     
