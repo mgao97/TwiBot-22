@@ -14,7 +14,7 @@ mkdir -p logs
 
 # 运行第一个实验
 echo "开始运行实验1，种子值: $SEED1"
-nohup python main_mgtab.py --seed $SEED1 > logs/sebot_seed_${SEED1}.log 2>&1 &
+nohup python main_twibot22.py --seed $SEED1 > logs/sebot_seed_${SEED1}.log 2>&1 &
 echo "实验1完成"
 
 # # 运行第二个实验

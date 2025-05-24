@@ -14,27 +14,27 @@ mkdir -p logs
 
 # 运行第一个实验
 echo "开始运行实验1，种子值: $SEED1"
-nohup python main_mgtab.py --seed $SEED1 > logs/sebot_seed_${SEED1}.log 2>&1 &
+nohup python train_twi22.py --seed $SEED1 > logs/hyperscan_seed_${SEED1}.log 2>&1 &
 echo "实验1完成"
 
 # # 运行第二个实验
 # echo "开始运行实验2，种子值: $SEED2"
-# nohup python main_mgtab.py --seed $SEED2 > logs/sebot_seed_${SEED2}.log 2>&1 &
+# nohup python train_twi22.py --seed $SEED2 > logs/hyperscan_seed_${SEED2}.log 2>&1 &
 # echo "实验2完成"
 
 # # 运行第三个实验
 # echo "开始运行实验3，种子值: $SEED3"
-# nohup python main_mgtab.py --seed $SEED3 > logs/sebot_seed_${SEED3}.log 2>&1 &
+# nohup python SimpleHGN_sample.py --seed $SEED3 > logs/simhgn_seed_${SEED3}.log 2>&1 &
 # echo "实验3完成"
 
 # # 运行第四个实验
 # echo "开始运行实验4，种子值: $SEED4"
-# nohup python main_mgtab.py --seed $SEED4 > logs/sebot_seed_${SEED4}.log 2>&1 &
+# nohup python SimpleHGN_sample.py --seed $SEED4 > logs/simhgn_seed_${SEED4}.log 2>&1 &
 # echo "实验4完成"
 
 # # 运行第三个实验
 # echo "开始运行实验5，种子值: $SEED5"
-# nohup python main_mgtab.py --seed $SEED5 > logs/sebot_seed_${SEED5}.log 2>&1 &
+# nohup python SimpleHGN_sample.py --seed $SEED5 > logs/simhgn_seed_${SEED5}.log 2>&1 &
 # echo "实验5完成"
 
 # echo "所有实验已完成，结果已保存到res目录"
