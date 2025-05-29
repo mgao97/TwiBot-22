@@ -114,30 +114,164 @@ class SEP_G(torch.nn.Module):
         self.classifier = self.get_classifier()
 
         self.feature_encoder = FeatureEncoder(args)
-
-    def __process_layer_edgeIndex(self, batch_data, layer=0):  # 生成对应层的边索引，因为
+    
+    def __process_layer_edgeIndex(self, batch_data, layer=0):
         edge_mat_list = []
         start_idx = [0]
         for i, graph in enumerate(batch_data):
-            # print('start_idx[i]:',i, start_idx[i])
-            # print('graph:',graph)
+            # Check if 'node_size' key exists
+            if 'node_size' not in graph:
+                # If 'node_size' doesn't exist, create it with default values
+                if 'G' in graph:
+                    # If graph object exists, use its node count
+                    node_count = len(graph['G'].nodes)
+                    graph['node_size'] = {layer: node_count}
+                else:
+                    # Fallback to a default size
+                    graph['node_size'] = {layer: 1}
+            
+            # Ensure the layer key exists in node_size
+            if layer not in graph['node_size']:
+                if 'G' in graph:
+                    graph['node_size'][layer] = len(graph['G'].nodes)
+                else:
+                    graph['node_size'][layer] = 1
+                    
             start_idx.append(start_idx[i] + graph['node_size'][layer])
+            
+            # Check if 'graph_mats' exists
+            if 'graph_mats' not in graph or layer not in graph['graph_mats']:
+                # Create empty edge matrix if missing
+                if 'graph_mats' not in graph:
+                    graph['graph_mats'] = {}
+                graph['graph_mats'][layer] = torch.zeros((2, 0), dtype=torch.long)
+                
             edge_mat_list.append(graph['graph_mats'][layer] + start_idx[i])
+        
+        # Handle case where edge_mat_list is empty
+        if not edge_mat_list:
+            return torch.zeros((2, 0), dtype=torch.long).to(self.args.device)
+            
         edge_index = torch.cat(edge_mat_list, 1)
         return edge_index.to(self.args.device)
 
+    # def __process_layer_edgeIndex(self, batch_data, layer=0):  # 生成对应层的边索引，因为
+    #     edge_mat_list = []
+    #     start_idx = [0]
+    #     for i, graph in enumerate(batch_data):
+    #         # print('start_idx[i]:',i, start_idx[i])
+    #         # print('graph:',graph)
+    #         start_idx.append(start_idx[i] + graph['node_size'][layer])
+    #         edge_mat_list.append(graph['graph_mats'][layer] + start_idx[i])
+    #     edge_index = torch.cat(edge_mat_list, 1)
+    #     return edge_index.to(self.args.device)
+
+    # def __process_sep_edgeIndex(self, batch_data, layer=1):
+    #     edge_mat_list = []
+    #     start_pdx = [0]
+    #     start_idx = [0]
+    #     for i, graph in enumerate(batch_data):
+    #         start_pdx.append(start_pdx[i] + graph['node_size'][layer - 1])
+    #         start_idx.append(start_idx[i] + graph['node_size'][layer])
+    #         edge_mat_list.append(
+    #             torch.LongTensor(graph['edges'][layer]) +
+    #             torch.LongTensor([start_idx[i], start_pdx[i]]))
+    #     edge_index = torch.cat(edge_mat_list, 0).T
+    #     return edge_index.to(self.args.device)
+
+    # def __process_sep_edgeIndex(self, batch_data, layer=1):
+    #     edge_mat_list = []
+    #     start_pdx = [0]
+    #     start_idx = [0]
+    #     for i, graph in enumerate(batch_data):
+    #         # 检查 'node_size' 键是否存在
+    #         if 'node_size' not in graph:
+    #             # 如果不存在，创建默认的 node_size 字典
+    #             if 'G' in graph:
+    #                 # 如果有图对象，使用图中节点数量
+    #                 graph['node_size'] = {
+    #                     layer-1: len(graph['G'].nodes),
+    #                     layer: len(graph['G'].nodes)
+    #                 }
+    #             else:
+    #                 # 否则使用默认值
+    #                 graph['node_size'] = {layer-1: 1, layer: 1}
+            
+    #         # 确保 layer 和 layer-1 键存在于 node_size 字典中
+    #         if layer-1 not in graph['node_size']:
+    #             graph['node_size'][layer-1] = 1
+    #         if layer not in graph['node_size']:
+    #             graph['node_size'][layer] = 1
+                
+    #         start_pdx.append(start_pdx[i] + graph['node_size'][layer - 1])
+    #         start_idx.append(start_idx[i] + graph['node_size'][layer])
+            
+    #         # 检查 'edges' 键是否存在
+    #         if 'edges' not in graph or layer not in graph['edges']:
+    #             # 如果不存在，创建空边列表
+    #             if 'edges' not in graph:
+    #                 graph['edges'] = {}
+    #             graph['edges'][layer] = []
+                
+    #         edge_mat_list.append(
+    #             torch.LongTensor(graph['edges'][layer]) +
+    #             torch.LongTensor([start_idx[i], start_pdx[i]]))
+        
+    #     # 如果没有边，返回空张量
+    #     if not edge_mat_list:
+    #         return torch.zeros((2, 0), dtype=torch.long).to(self.args.device)
+            
+    #     edge_index = torch.cat(edge_mat_list, 0).T
+    #     return edge_index.to(self.args.device)
     def __process_sep_edgeIndex(self, batch_data, layer=1):
         edge_mat_list = []
         start_pdx = [0]
         start_idx = [0]
         for i, graph in enumerate(batch_data):
+            # Check if 'node_size' key exists
+            if 'node_size' not in graph:
+                # If 'node_size' doesn't exist, create it with default values
+                if 'G' in graph:
+                    # If graph object exists, use its node count
+                    node_count = len(graph['G'].nodes)
+                    graph['node_size'] = {layer-1: node_count, layer: node_count}
+                else:
+                    # Fallback to a default size
+                    graph['node_size'] = {layer-1: 1, layer: 1}
+            
+            # Ensure the layer keys exist in node_size
+            if layer-1 not in graph['node_size']:
+                graph['node_size'][layer-1] = 1
+            if layer not in graph['node_size']:
+                graph['node_size'][layer] = 1
+                
             start_pdx.append(start_pdx[i] + graph['node_size'][layer - 1])
             start_idx.append(start_idx[i] + graph['node_size'][layer])
+            
+            # Check if 'edges' key exists
+            if 'edges' not in graph or layer not in graph['edges']:
+                # If 'edges' doesn't exist, create an empty list
+                if 'edges' not in graph:
+                    graph['edges'] = {}
+                graph['edges'][layer] = []
+            
+            # Handle empty edge lists
+            if len(graph['edges'][layer]) == 0:
+                # Skip this graph if it has no edges
+                continue
+                
             edge_mat_list.append(
                 torch.LongTensor(graph['edges'][layer]) +
                 torch.LongTensor([start_idx[i], start_pdx[i]]))
+        
+        # If no valid edges were found, return an empty tensor
+        if not edge_mat_list:
+            return torch.zeros((2, 0), dtype=torch.long).to(self.args.device)
+            
         edge_index = torch.cat(edge_mat_list, 0).T
         return edge_index.to(self.args.device)
+
+    
 
     def __process_sep_size(self, batch_data, layer=1):
         size = [(graph['node_size'][layer], graph['node_size'][layer - 1])

@@ -164,32 +164,83 @@ class SEBot(nn.Module):
         self.test_results = []
 
     # https://blog.csdn.net/weixin_44966641/article/details/120382198
-    def infonce_loss(self,
-                     emb_i,
-                     emb_j,
-                     temperature=0.1):  # emb_i, emb_j 是来自同一图像的两种不同的预处理方法得到
-        batch_size = emb_i.shape[0]
-        negatives_mask = (
-            ~torch.eye(batch_size * 2, batch_size * 2, dtype=bool)).float().to(
-                self.args.device).float()  # (2*bs, 2*bs)
-        z_i = F.normalize(emb_i, dim=1)  # (bs, dim)  --->  (bs, dim)
-        z_j = F.normalize(emb_j, dim=1)  # (bs, dim)  --->  (bs, dim)
+    # def infonce_loss(self,
+    #                  emb_i,
+    #                  emb_j,
+    #                  temperature=0.1):  # emb_i, emb_j 是来自同一图像的两种不同的预处理方法得到
+    #     batch_size = emb_i.shape[0]
+    #     negatives_mask = (
+    #         ~torch.eye(batch_size * 2, batch_size * 2, dtype=bool)).float().to(
+    #             self.args.device).float()  # (2*bs, 2*bs)
+    #     z_i = F.normalize(emb_i, dim=1)  # (bs, dim)  --->  (bs, dim)
+    #     z_j = F.normalize(emb_j, dim=1)  # (bs, dim)  --->  (bs, dim)
 
-        representations = torch.cat([z_i, z_j], dim=0)  # repre: (2*bs, dim)
-        similarity_matrix = torch.mm(representations, representations.t())
+    #     representations = torch.cat([z_i, z_j], dim=0)  # repre: (2*bs, dim)
+    #     similarity_matrix = torch.mm(representations, representations.t())
 
-        sim_ij = torch.diag(similarity_matrix, batch_size)  # bs
-        sim_ji = torch.diag(similarity_matrix, -batch_size)  # bs
-        positives = torch.cat([sim_ij, sim_ji], dim=0)  # 2*bs
+    #     sim_ij = torch.diag(similarity_matrix, batch_size)  # bs
+    #     sim_ji = torch.diag(similarity_matrix, -batch_size)  # bs
+    #     positives = torch.cat([sim_ij, sim_ji], dim=0)  # 2*bs
 
-        nominator = torch.exp(positives / temperature)  # 2*bs
-        denominator = negatives_mask * torch.exp(
-            similarity_matrix / temperature)  # 2*bs, 2*bs
+    #     nominator = torch.exp(positives / temperature)  # 2*bs
+    #     denominator = negatives_mask * torch.exp(
+    #         similarity_matrix / temperature)  # 2*bs, 2*bs
 
-        loss_partial = -torch.log(
-            nominator / torch.sum(denominator, dim=1))  # 2*bs
-        loss = torch.sum(loss_partial) / (2 * batch_size)
-        return loss
+    #     loss_partial = -torch.log(
+    #         nominator / torch.sum(denominator, dim=1))  # 2*bs
+    #     loss = torch.sum(loss_partial) / (2 * batch_size)
+    #     return loss
+
+    def infonce_loss_efficient(self, z_i, z_j, temperature=0.5, chunk_size=1024):
+        """
+        内存高效的InfoNCE损失函数实现
+        通过分块计算相似度矩阵来减少内存使用
+        """
+        batch_size = z_i.size(0)
+        
+        # 将表示向量归一化
+        z_i = F.normalize(z_i, dim=1)
+        z_j = F.normalize(z_j, dim=1)
+        
+        # 将所有表示向量拼接在一起
+        representations = torch.cat([z_i, z_j], dim=0)
+        
+        # 初始化损失
+        total_loss = 0.0
+        n_chunks = (batch_size * 2 + chunk_size - 1) // chunk_size
+        
+        for i in range(n_chunks):
+            # 计算当前块的起始和结束索引
+            start_idx = i * chunk_size
+            end_idx = min(start_idx + chunk_size, batch_size * 2)
+            current_chunk = representations[start_idx:end_idx]
+            
+            # 计算当前块与所有表示向量的相似度
+            similarity_matrix_chunk = torch.mm(current_chunk, representations.t()) / temperature
+            
+            # 创建当前块的标签矩阵
+            labels_chunk = torch.zeros(end_idx - start_idx, batch_size * 2, device=z_i.device)
+            
+            # 设置正样本对的位置
+            for k in range(start_idx, end_idx):
+                pos_idx = (k + batch_size) % (2 * batch_size)
+                labels_chunk[k - start_idx, pos_idx] = 1.0
+            
+            # 计算当前块的损失
+            logits_max, _ = torch.max(similarity_matrix_chunk, dim=1, keepdim=True)
+            logits = similarity_matrix_chunk - logits_max.detach()  # 数值稳定性
+            
+            exp_logits = torch.exp(logits)
+            log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
+            
+            # 计算正样本对的均值
+            mean_log_prob_pos = (labels_chunk * log_prob).sum(1) / labels_chunk.sum(1)
+            
+            # 累加损失
+            loss = -mean_log_prob_pos.mean()
+            total_loss += loss * (end_idx - start_idx) / (batch_size * 2)
+        
+        return total_loss
 
     def forward(self, batch):
         out_u = self.sep_u(batch)

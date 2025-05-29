@@ -8,20 +8,21 @@ import numpy as np
 import os
 from torch_geometric.data import Data
 from BackBone.rgcn import FACNConv as RGCNConv
-# from BackBone.self_attention import SelfAttention
+from BackBone.self_attention import SelfAttention
 import argparse
 import pickle
 from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score,auc,roc_auc_score,precision_recall_curve,auc
-from sklearn.linear_model import LogisticRegression
-from sklearn.utils import shuffle
-
 
 import pandas as pd
 import os
 import numpy as np
 import random
 
-PWD = '/dev/shm/mgtab/'
+PWD = '/dev/shm/twi22/'
+
+
+# os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 
 def edge_mask(edge_index, edge_attr, pe):
@@ -34,35 +35,6 @@ def edge_mask(edge_index, edge_attr, pe):
     edge_attr = edge_attr.clone()
     edge_attr = edge_attr[pre_index]
     return edge_index, edge_attr
-
-
-def edge_dropping(edge_index, edge_attr, edge_weight):
-    # each edge has a probability of pe to be removed
-    edge_index = edge_index.clone()
-    pre_index = torch.bernoulli(edge_weight) == 1
-    pre_index.to(edge_index.device)
-    edge_index = edge_index[:, pre_index]
-    edge_attr = edge_attr.clone()
-    edge_attr = edge_attr[pre_index]
-    return edge_index, edge_attr
-
-
-def relatioal_edge_adding(edge_index, edge_attr, pe):
-    # for each relation, add pe of the number of edges
-    relation_num = edge_attr.max() + 1
-    node_num = edge_index.max() + 1
-    edge_index = edge_index.clone()
-    edge_type = edge_attr.clone()
-    for i in range(relation_num):
-        relation_edge_num = edge_index[:, edge_type == i].shape[1]
-        added_edge_index = torch.randint(
-            0, node_num, (2, int(relation_edge_num * pe))).to(edge_attr.device)
-        edge_index = torch.cat((edge_index, added_edge_index), dim=1)
-        edge_type = torch.cat(
-            (edge_type,
-             torch.ones(int(relation_edge_num * pe)).to(edge_attr.device) * i),
-            dim=0)
-    return edge_index, edge_type
 
 
 def feature_mask(x, drop_prob):
@@ -82,9 +54,9 @@ def relational_undirected(edge_index, edge_type):
     edge_type = edge_type.clone()
     r_edge = []
     for i in range(relation_num):
-        e1 = edge_index[:, edge_type == i]
-        e2 = edge_index[:, edge_type == i].flip(0)
-        edges = torch.cat((e1, e2), dim=1).unique(dim=1)
+        e1 = edge_index[:, edge_type == i].unique(dim=1)
+        e2 = e1.flip(0)
+        edges = torch.cat((e1, e2), dim=1)
         r_edge.append(edges)
     edge_type = torch.cat(
         [torch.tensor([i] * e.shape[1]) for i, e in enumerate(r_edge)],
@@ -94,35 +66,18 @@ def relational_undirected(edge_index, edge_type):
     return edge_index, edge_type
 
 
-def mask_heterophily(edge_index, edge_type, x, labels, p):
-    node_num = len(labels)
-    clf = LogisticRegression(random_state=0, max_iter=1000)
-    clf.fit(x[:int(0.7 * node_num)], labels[:int(0.7 * node_num)])
-    y_pred = clf.predict(x[int(0.7 * node_num):])
-    labels = torch.cat(
-        (labels[:int(0.7 * node_num)], torch.tensor(y_pred).to(labels.device)))
-    mask = labels[edge_index[0]] != labels[edge_index[1]]
-    index = torch.nonzero(mask).squeeze()
-    n = len(index)
-    index = index[torch.randperm(n)]
-    index = index[:int(n * p)]  # 去除边的index
-    mask = torch.ones(edge_index.size(1),
-                      dtype=torch.bool).to(edge_index.device)
-    mask[index] = False
-
-    return edge_index[:, mask], edge_type[mask]
-
-
-class FeatureEncoder(nn.Module):
+class BotRGCN(nn.Module):
 
     def __init__(self, args):
-        super(FeatureEncoder, self).__init__()
-        self.args = args
+        super(BotRGCN, self).__init__()
         self.des_size = args.des_num
         self.tweet_size = args.tweet_num
         self.num_prop_size = args.prop_num
         self.cat_prop_size = args.cat_num
         self.dropout = args.dropout
+        self.node_num = args.node_num
+        self.pe = args.pe
+        self.pf = args.pf
         input_dimension = args.input_dim
         embedding_dimension = args.hidden_dim
 
@@ -139,43 +94,9 @@ class FeatureEncoder(nn.Module):
             nn.LeakyReLU())
 
         self.linear_relu_input = nn.Sequential(
-            nn.Linear(input_dimension, embedding_dimension), nn.LeakyReLU())
+            nn.Linear(input_dimension, embedding_dimension),
+            nn.PReLU(embedding_dimension))
 
-    def forward(self, x):
-        if self.args.dataset == 'twibot-20':
-            num_prop = x[:, :self.num_prop_size]
-            tweet = x[:,
-                      self.num_prop_size:self.num_prop_size + self.tweet_size]
-            cat_prop = x[:, self.num_prop_size +
-                         self.tweet_size:self.num_prop_size + self.tweet_size +
-                         self.cat_prop_size]
-            des = x[:,
-                    self.num_prop_size + self.tweet_size + self.cat_prop_size:]
-            d = self.linear_relu_des(des)
-            t = self.linear_relu_tweet(tweet)
-            n = self.linear_relu_num_prop(num_prop)
-            c = self.linear_relu_cat_prop(cat_prop)
-            x = torch.cat((d, t, n, c), dim=1)
-
-        x = self.linear_relu_input(x)
-        return x
-
-
-class BotRGCN(nn.Module):
-
-    def __init__(self, args):
-        super(BotRGCN, self).__init__()
-        self.des_size = args.des_num
-        self.tweet_size = args.tweet_num
-        self.num_prop_size = args.prop_num
-        self.cat_prop_size = args.cat_num
-        self.dropout = args.dropout
-        self.node_num = args.node_num
-        self.pe = args.pe
-        self.pf = args.pf
-        embedding_dimension = args.hidden_dim
-
-        self.feature_encoder = FeatureEncoder(args)
         self.rgcn1 = RGCNConv(embedding_dimension,
                               embedding_dimension,
                               num_relations=args.num_relations)
@@ -188,7 +109,7 @@ class BotRGCN(nn.Module):
 
         self.relu = nn.LeakyReLU()
 
-    def forward(self, data):
+    def forward(self, data, return_attention=False):
         x = data.x
         edge_index = data.edge_index
         edge_type = data.edge_type
@@ -196,12 +117,22 @@ class BotRGCN(nn.Module):
         if self.training:
             edge_index, edge_type = edge_mask(edge_index, edge_type, self.pe)
 
-        x = self.feature_encoder(x)
-        x = self.rgcn1(x, edge_index, edge_type)
-        x = self.relu(x)
+        num_prop = x[:, :self.num_prop_size]
+        tweet = x[:, self.num_prop_size:self.num_prop_size + self.tweet_size]
+        cat_prop = x[:,
+                     self.num_prop_size + self.tweet_size:self.num_prop_size +
+                     self.tweet_size + self.cat_prop_size]
+        des = x[:, self.num_prop_size + self.tweet_size + self.cat_prop_size:]
+        d = self.linear_relu_des(des)
+        t = self.linear_relu_tweet(tweet)
+        n = self.linear_relu_num_prop(num_prop)
+        c = self.linear_relu_cat_prop(cat_prop)
+        x = torch.cat((d, t, n, c), dim=1)
+
+        x = self.linear_relu_input(x)
+        x = self.rgcn1(x, edge_index, edge_type, return_attention)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.rgcn2(x, edge_index, edge_type)
-        x = self.relu(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.classifier(x)
         return x
@@ -229,36 +160,86 @@ class SEBot(nn.Module):
             nn.Linear(self.args.hidden_dim,
                       self.args.proj_dim), nn.LeakyReLU(),
             nn.Linear(self.args.proj_dim, self.args.hidden_dim))
-        # self.self_attention = SelfAttention(self.args.hidden_dim)
+        self.self_attention = SelfAttention(self.args.hidden_dim)
         self.test_results = []
 
-    # https://blog.csdn.net/weixin_44966641/article/details/120382198
-    def infonce_loss(self,
-                     emb_i,
-                     emb_j,
-                     temperature=0.1):  # emb_i, emb_j 是来自同一图像的两种不同的预处理方法得到
-        batch_size = emb_i.shape[0]
-        negatives_mask = (
-            ~torch.eye(batch_size * 2, batch_size * 2, dtype=bool)).float().to(
-                self.args.device).float()  # (2*bs, 2*bs)
-        z_i = F.normalize(emb_i, dim=1)  # (bs, dim)  --->  (bs, dim)
-        z_j = F.normalize(emb_j, dim=1)  # (bs, dim)  --->  (bs, dim)
+    def infonce_loss_efficient(self, z_i, z_j, temperature=0.5, chunk_size=1024):
+        """
+        内存高效的InfoNCE损失函数实现
+        通过分块计算相似度矩阵来减少内存使用
+        """
+        batch_size = z_i.size(0)
+        
+        # 将表示向量归一化
+        z_i = F.normalize(z_i, dim=1)
+        z_j = F.normalize(z_j, dim=1)
+        
+        # 将所有表示向量拼接在一起
+        representations = torch.cat([z_i, z_j], dim=0)
+        
+        # 初始化损失
+        total_loss = 0.0
+        n_chunks = (batch_size * 2 + chunk_size - 1) // chunk_size
+        
+        for i in range(n_chunks):
+            # 计算当前块的起始和结束索引
+            start_idx = i * chunk_size
+            end_idx = min(start_idx + chunk_size, batch_size * 2)
+            current_chunk = representations[start_idx:end_idx]
+            
+            # 计算当前块与所有表示向量的相似度
+            similarity_matrix_chunk = torch.mm(current_chunk, representations.t()) / temperature
+            
+            # 创建当前块的标签矩阵
+            labels_chunk = torch.zeros(end_idx - start_idx, batch_size * 2, device=z_i.device)
+            
+            # 设置正样本对的位置
+            for k in range(start_idx, end_idx):
+                pos_idx = (k + batch_size) % (2 * batch_size)
+                labels_chunk[k - start_idx, pos_idx] = 1.0
+            
+            # 计算当前块的损失
+            logits_max, _ = torch.max(similarity_matrix_chunk, dim=1, keepdim=True)
+            logits = similarity_matrix_chunk - logits_max.detach()  # 数值稳定性
+            
+            exp_logits = torch.exp(logits)
+            log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
+            
+            # 计算正样本对的均值
+            mean_log_prob_pos = (labels_chunk * log_prob).sum(1) / labels_chunk.sum(1)
+            
+            # 累加损失
+            loss = -mean_log_prob_pos.mean()
+            total_loss += loss * (end_idx - start_idx) / (batch_size * 2)
+        
+        return total_loss
+    # # https://blog.csdn.net/weixin_44966641/article/details/120382198
+    # def infonce_loss(self,
+    #                  emb_i,
+    #                  emb_j,
+    #                  temperature=0.1):  # emb_i, emb_j 是来自同一图像的两种不同的预处理方法得到
+    #     batch_size = emb_i.shape[0]
+    #     negatives_mask = (
+    #         ~torch.eye(batch_size * 2, batch_size * 2, dtype=bool)).float().to(
+    #             self.args.device).float()  # (2*bs, 2*bs)
+    #     z_i = F.normalize(emb_i, dim=1)  # (bs, dim)  --->  (bs, dim)
+    #     z_j = F.normalize(emb_j, dim=1)  # (bs, dim)  --->  (bs, dim)
 
-        representations = torch.cat([z_i, z_j], dim=0)  # repre: (2*bs, dim)
-        similarity_matrix = torch.mm(representations, representations.t())
+    #     representations = torch.cat([z_i, z_j], dim=0)  # repre: (2*bs, dim)
+    #     similarity_matrix = torch.mm(representations, representations.t())
 
-        sim_ij = torch.diag(similarity_matrix, batch_size)  # bs
-        sim_ji = torch.diag(similarity_matrix, -batch_size)  # bs
-        positives = torch.cat([sim_ij, sim_ji], dim=0)  # 2*bs
+    #     sim_ij = torch.diag(similarity_matrix, batch_size)  # bs
+    #     sim_ji = torch.diag(similarity_matrix, -batch_size)  # bs
+    #     positives = torch.cat([sim_ij, sim_ji], dim=0)  # 2*bs
 
-        nominator = torch.exp(positives / temperature)  # 2*bs
-        denominator = negatives_mask * torch.exp(
-            similarity_matrix / temperature)  # 2*bs, 2*bs
+    #     nominator = torch.exp(positives / temperature)  # 2*bs
+    #     denominator = negatives_mask * torch.exp(
+    #         similarity_matrix / temperature)  # 2*bs, 2*bs
 
-        loss_partial = -torch.log(
-            nominator / torch.sum(denominator, dim=1))  # 2*bs
-        loss = torch.sum(loss_partial) / (2 * batch_size)
-        return loss
+    #     loss_partial = -torch.log(
+    #         nominator / torch.sum(denominator, dim=1))  # 2*bs
+    #     loss = torch.sum(loss_partial) / (2 * batch_size)
+    #     return loss
 
     def forward(self, batch):
         out_u = self.sep_u(batch)
@@ -268,17 +249,12 @@ class SEBot(nn.Module):
         out_u = out_u[:self.args.node_num, :]
         out_c = out_c[:self.args.node_num, :]
 
-        loss1 = self.infonce_loss(self.proj_u(out_u), self.proj_u(out_c),
+        loss1 = self.infonce_loss_efficient(self.proj_u(out_u), self.proj_u(out_c),
                                   self.args.temperature)
-        loss2 = self.infonce_loss(self.proj_g(out_g), self.proj_g(out_c),
+        loss2 = self.infonce_loss_efficient(self.proj_g(out_g), self.proj_g(out_c),
                                   self.args.temperature)
         if self.training:
             # Training
-            
-
-            out_u = torch.tensor(out_u,dtype=torch.float) if not isinstance(out_u, torch.Tensor) else out_u.float()
-            out_g = torch.tensor(out_g,dtype=torch.float) if not isinstance(out_g, torch.Tensor) else out_g.float()
-            out_c = torch.tensor(out_c,dtype=torch.float) if not isinstance(out_c, torch.Tensor) else out_c.float()
             train_out = torch.cat([out_u, out_g, out_c],
                                   dim=1)[batch['data'].train_idx]
             train_out = self.classifier(train_out)
@@ -288,10 +264,6 @@ class SEBot(nn.Module):
             return loss
         else:
             # Validation
-            # 确保所有输入是张量
-            out_u = torch.tensor(out_u).long() if not isinstance(out_u, torch.Tensor) else out_u
-            out_g = torch.tensor(out_g).long() if not isinstance(out_g, torch.Tensor) else out_g
-            out_c = torch.tensor(out_c).long() if not isinstance(out_c, torch.Tensor) else out_c
             val_out = torch.cat([out_u, out_g, out_c],
                                 dim=1)[batch['data'].val_idx]
             val_out = self.classifier(val_out)
@@ -301,11 +273,12 @@ class SEBot(nn.Module):
                 batch['data'].y[batch['data'].val_idx].cpu().numpy(),
                 torch.argmax(val_out, dim=1).cpu().numpy())
 
+            # Test
             test_out = torch.cat([out_u, out_g, out_c],
                                  dim=1)[batch['data'].test_idx]
             
-            torch.save(test_out, '/dev/shm/mgtab/res/sebot_mgtab_emb.pt')
-            torch.save(batch['data'].y[batch['data'].test_idx].cpu(), '/dev/shm/mgtab/res/sebot_mgtab_y.pt')
+            torch.save(test_out, '/dev/shm/twi20/res/sebot_twi20_emb.pt')
+            torch.save(batch['data'].y[batch['data'].test_idx].cpu(), 'sebot_twi20_y.pt')
 
             test_out = self.classifier(test_out)
             test_loss = F.cross_entropy(
@@ -319,7 +292,6 @@ class SEBot(nn.Module):
             test_precision = precision_score(test_label, test_pred)
             test_precision1, test_recall1, _ = precision_recall_curve(test_label, test_pred)
             test_aucpr = auc(test_recall1, test_precision1)
-            test_rocauc = roc_auc_score(test_label, test_pred)
 
             # 计算精确率为80%时的召回率
             recall_at_p80 = 0
@@ -355,7 +327,7 @@ class SEBot(nn.Module):
             print(f"Test Precision: {test_precision:.4f}")
             print(f"Test AUC-PR: {test_aucpr:.4f}")
             print(f"Test ROC-AUC: {test_rocauc:.4f}")
-
+            results = []
             # 记录结果
             results.append({
                 'seed': args.seed,
@@ -374,8 +346,7 @@ class SEBot(nn.Module):
             print(results_df.to_markdown(index=False))
 
             # 保存结果到CSV
-            results_df.to_csv('SEBot_mgtab.csv', mode='a', header=not os.path.exists(f'SEBot_mgtab.csv'), index=False)
-
+            results_df.to_csv('SEBot_twi22.csv', mode='a', header=not os.path.exists(f'SEBot_twi22.csv'), index=False)
 
             self.test_results.append(
                 [test_acc, test_f1, test_recall, test_precision, test_aucpr, test_rocauc])
@@ -413,47 +384,44 @@ class Trainer(object):
         self.test_results = []
 
     def load_data(self):
-        t_path = os.path.join(
-            PWD, 'trees',
-            '%s_%s.pickle' % (self.args.dataset, self.args.tree_depth))
-        with open(t_path, 'rb') as fp:
-            self.layer_data = pickle.load(fp)
+        # t_path = os.path.join(
+        #     PWD, 'trees',
+        #     '%s_%s.pickle' % (self.args.dataset, self.args.tree_depth))
+        # with open(t_path, 'rb') as fp:
+        #     self.layer_data = pickle.load(fp)
         g_path = os.path.join(
             PWD, 'subgraphs',
             '%s_%s.pickle' % (self.args.dataset, self.args.tree_depth))
         with open(g_path, 'rb') as fp:
             self.subgraphs = pickle.load(fp)
-
         # self.args.num_features = self.subgraphs[0]['node_features'].size(1)
         self.args.num_features = self.args.hidden_dim
 
         # path = './dataset/' + self.args.dataset + '/'
-        path = '/dev/shm/mgtab/'
+        path = '/dev/shm/twi22/processed_data/'
         edge_index = torch.load(path + 'edge_index.pt')
         edge_type = torch.load(path + 'edge_type.pt')
-        self.args.num_relations = edge_type.max() + 1
         edge_index, edge_type = relational_undirected(edge_index, edge_type)
+        self.args.num_relations = edge_type.max() + 1
 
-        if self.args.dataset == 'twibot-20':
-            x = torch.cat([
-                torch.load(path + 'num_properties_tensor.pt'),
-                torch.load(path + 'tweets_tensor.pt'),
-                torch.load(path + 'cat_properties_tensor.pt'),
-                torch.load(path + 'des_tensor.pt')
-            ],
-                          dim=1)
-            sample_idx = list(range(self.args.node_num))
-        else:
-            x = torch.load(path + 'features.pt')
-            sample_idx = shuffle(np.array(range(self.args.node_num)),
-                                 random_state=self.args.seed)
-        label = torch.load(path + 'labels_bot.pt')
+        x = torch.cat([
+            torch.load(path + 'num_properties_tensor.pt'),
+            torch.load(path + 'user_tweet_feats.pt'),
+            torch.load(path + 'cat_properties_tensor.pt'),
+            torch.load(path + 'user_des_feats.pt')
+        ],
+                      dim=1)
+        sample_idx = list(range(self.args.node_num))
+
+        label = torch.load(path + 'label.pt')
         data = Data(x=x, edge_index=edge_index, edge_type=edge_type,
                     y=label).to(self.args.device)
         data.train_idx = sample_idx[:int(0.7 * args.node_num)]
         data.val_idx = sample_idx[int(0.7 * args.node_num):int(0.9 *
                                                                args.node_num)]
         data.test_idx = sample_idx[int(0.9 * args.node_num):]
+
+        # data.edge_mask = TTA(data)
 
         self.data = data
 
@@ -488,7 +456,7 @@ class Trainer(object):
 
             batch = {
                 'data': self.data.to(self.args.device),
-                'layer_data': self.layer_data,  # total graph tree
+                # 'layer_data': self.layer_data,  # total graph tree
                 'subgraphs': self.subgraphs  # subgraph trees
             }
             self.optimizer.zero_grad()
@@ -506,6 +474,7 @@ class Trainer(object):
             val_accs.append(val_acc)
             val_losses.append(val_loss)
             test_accs.append(test_acc)
+            
             if self.patience > self.args.patience:
                 break
 
@@ -529,8 +498,8 @@ class Trainer(object):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SEP')
-    parser.add_argument('--dataset', type=str, default='MGTAB')
-    parser.add_argument('--node_num', type=int, default=10199)
+    parser.add_argument('--dataset', type=str, default='twibot-22')
+    parser.add_argument('--node_num', type=int, default=11826)
     parser.add_argument('--tree_depth', type=int, default=6)
 
     parser.add_argument('--cat_num', type=int, default=3)
@@ -539,7 +508,7 @@ if __name__ == '__main__':
     parser.add_argument('--tweet_num', type=int, default=768)
     parser.add_argument('--num_classes', type=int, default=2)
     parser.add_argument('--conv', type=str, default='GCN')
-    parser.add_argument('--input_dim', type=int, default=788)
+    parser.add_argument('--input_dim', type=int, default=1544)
     parser.add_argument('--hidden_dim', type=int, default=32)
     parser.add_argument('--proj_dim', type=int, default=16)
     parser.add_argument('--temperature', type=float, default=0.1)
@@ -550,37 +519,32 @@ if __name__ == '__main__':
     parser.add_argument('--num_blocks', type=int, default=2)
     parser.add_argument('--num_convs', type=int, default=3)
     parser.add_argument('--link_input', action='store_true', default=False)
-    parser.add_argument('-gp',
-                        '--global-pooling',
-                        type=str,
-                        default="average",
-                        choices=["sum", "average"],
-                        help='Pooling for over nodes: sum or average')
-    parser.add_argument('--pe', type=float, default=0.3)  # edge dropout rate
+    parser.add_argument('-gp','--global-pooling',type=str,default="average",choices=["sum", "average"],help='Pooling for over nodes: sum or average')
+    parser.add_argument('--pe', type=float, default=0.2)  # edge dropout rate
     parser.add_argument('--pf', type=float, default=0.2)  # edge dropout ratee
 
     parser.add_argument('--seed', type=int, default=42, help='seed')
-    parser.add_argument('--batch_size', default=512, type=int)
+    parser.add_argument('--batch_size', default=128, type=int)
     parser.add_argument('--lr', type=float, default=0.01)
     parser.add_argument('--weight_decay', type=float, default=3e-3)
-    parser.add_argument("--dropout", type=float, default=0.3)
-    parser.add_argument('--conv_dropout', type=float, default=0.3)
-    parser.add_argument('--pooling_dropout', type=float, default=0.3)
-    parser.add_argument('--epochs', default=200, type=int)
+    parser.add_argument("--dropout", type=float, default=0.5)
+    parser.add_argument('--conv_dropout', type=float, default=0.5)
+    parser.add_argument('--pooling_dropout', type=float, default=0.5)
+    parser.add_argument('--epochs', default=50, type=int)
     parser.add_argument("--gpu", type=int, default=0)
-    parser.add_argument('--patience', type=int, default=10)
-    parser.add_argument(
-        '--save_top_k', type=int,
-        default=6)  # save top k models with best validation loss
+    parser.add_argument('--patience', type=int, default=50)
+    parser.add_argument('--save_top_k', type=int,default=6)  # save top k models with best validation loss
 
     args = parser.parse_args()
-    # args.device = torch.device(
-    #     "cuda:" + str(args.gpu) if torch.cuda.is_available() else "cpu")
-    args.device = torch.device("cpu")
-    
+
     global results
     results = []
 
+    print(args.link_input)
+    # args.device = torch.device(
+    #     "cuda:" + str(args.gpu) if torch.cuda.is_available() else "cpu")
+    args.device = torch.device("cpu")
     trainer = Trainer(args)
+    results = []
     test_acc = trainer.train()
-    
+    # print('test_acc: ', test_acc)

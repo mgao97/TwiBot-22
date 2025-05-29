@@ -11,6 +11,7 @@ from torch_geometric.utils import to_undirected
 from torch_geometric.utils import k_hop_subgraph, remove_self_loops
 import random
 import os
+from tqdm import tqdm
 
 PWD = os.path.dirname(os.path.realpath(__file__))
 
@@ -531,28 +532,42 @@ class PartitionTree():
         assert len(self.tree_node) == count
 
 
+# def get_nodelist(edge_index):
+#     nodelist = []
+#     start_node = edge_index[0, :].unique().tolist()
+#     end_node = edge_index[1, :].unique().tolist()
+#     nodelist.extend(start_node)
+#     nodelist.extend(end_node)
+#     nodelist = list(set(nodelist))
+#     return nodelist
+
 def get_nodelist(edge_index):
-    nodelist = []
-    start_node = edge_index[0, :].unique().tolist()
-    end_node = edge_index[1, :].unique().tolist()
-    nodelist.extend(start_node)
-    nodelist.extend(end_node)
-    nodelist = list(set(nodelist))
+    """
+    从边索引中提取唯一节点列表
+    
+    参数:
+        edge_index: 形状为 [2, num_edges] 的张量，表示图的边
+        
+    返回:
+        唯一节点ID的列表
+    """
+    # 使用torch.unique直接获取所有唯一节点ID，避免重复计算
+    nodelist = torch.unique(edge_index.flatten()).tolist()
     return nodelist
 
 
-def reset_edge_index(edge_index, nodelist):
-    for i in range(2):
-        for j in range(edge_index.size(1)):
-            edge_index[i, j] = nodelist.index(edge_index[i, j])
-    return edge_index
+# def reset_edge_index(edge_index, nodelist):
+#     for i in range(2):
+#         for j in range(edge_index.size(1)):
+#             edge_index[i, j] = nodelist.index(edge_index[i, j])
+#     return edge_index
 
 
 def limit_neighbor_num(edge_index, top_n):
     # 限制每个节点的邻居节点数量
     nodelist = get_nodelist(edge_index)
-    for i in range(len(nodelist)):
-        print('limit node %d' % i)
+    for i in tqdm(range(len(nodelist))):
+        # print('limit node %d' % i)
         node = nodelist[i]
         node_neighbor = edge_index[1, edge_index[0, :] == node].tolist()
         if len(node_neighbor) > top_n:
@@ -563,7 +578,8 @@ def limit_neighbor_num(edge_index, top_n):
             edge_index = edge_index[:, edge_index[0, :] != node]
             edge_index = torch.cat([
                 edge_index,
-                torch.tensor([[node] * len(node_neighbor), node_neighbor], dtype=torch.long)
+                torch.tensor(np.array([[node] * len(node_neighbor), node_neighbor]), dtype=torch.long)
+                # torch.tensor([[node] * len(node_neighbor), node_neighbor], dtype=torch.long)
             ],
                                    dim=1)
     return edge_index
@@ -578,29 +594,60 @@ def edge_mask(edge_index, pe):
     edge_index = edge_index[:, pre_index]
     return edge_index
 
+def reset_edge_index(edge_index, nodelist):
+    # 检查 edge_index 是否为空或只有一个维度
+    if edge_index is None or edge_index.dim() <= 1 or edge_index.size(0) == 0:
+        print("警告: edge_index 为空或维度不正确")
+        return edge_index  # 返回原始 edge_index 或创建一个空的二维张量
+    
+    # 原有代码
+    mapping = {j: i for i, j in enumerate(nodelist)}
+    new_edge_index = torch.zeros_like(edge_index)
+    for j in range(edge_index.size(1)):
+        new_edge_index[0, j] = mapping[int(edge_index[0, j])]
+        new_edge_index[1, j] = mapping[int(edge_index[1, j])]
+    return new_edge_index
 
 def load_graph(dataname='twibot-20'):
     g_list = []
 
     print('loading data')
     # path = './dataset/' + dataname + '/'
-    path = '/home/ad/mgao/SEBot/MGTAB/'
+    # path = '/home/ad/mgao/SEBot/MGTAB/'
+    path = '/dev/shm/twi22/processed_data/'
     edge_index = torch.load(path + 'edge_index.pt')
     edge_type = torch.load(path + 'edge_type.pt')
     print(edge_index.size(), edge_type.size())
-
-    label = torch.load(path + 'labels_bot.pt')
+    # label = torch.load(path + 'labels_bot.pt')
+    label = torch.load(path + 'label.pt')
 
     node_num = label.size(0)
     hop = 1  # k-hop subgraph
     top_n = 10  # top n nodes
 
     (edge_index, _) = remove_self_loops(limit_neighbor_num(edge_index, top_n))
+    node_list = get_nodelist(edge_index)
+    # new_edge_index = reset_edge_index(edge_index, node_list)
+
+    # 修改为
+    new_edge_index = reset_edge_index(edge_index, node_list)
+    num_nodes = len(node_list)
+    node_map = {node: i for i, node in enumerate(node_list)}
+
+    
     sole_node = []
-    for i in range(node_num):
+    for i in tqdm(range(node_num)):
         print('node %d subgraph' % i)
+        # 对于每个节点 i，需要先映射到新的索引
+        new_i = node_map.get(i, i)  # 如果 i 不在映射中，则保持不变
+
         subset, n_edge_index, n_mapping, n_edge_mask = k_hop_subgraph(
-            i, hop, edge_index, relabel_nodes=True)
+            new_i, hop, new_edge_index, 
+            relabel_nodes=True,
+            num_nodes=node_num
+        )
+        # subset, n_edge_index, n_mapping, n_edge_mask = k_hop_subgraph(
+        #     i, hop, edge_index, relabel_nodes=True)
 
         # too many nodes
         '''
@@ -616,8 +663,7 @@ def load_graph(dataname='twibot-20'):
             n_edge_index = reset_edge_index(n_edge_index, nodelist)
         '''
         # solely node
-        if min(n_edge_index.size()
-               ) == 0:  # for solely node, n_edge_index shape: [2,0]
+        if min(n_edge_index.size()) == 0:  # for solely node, n_edge_index shape: [2,0]
             print('solely node')
             sole_node.append(i)
             # random gengearte a k-hop subgraph

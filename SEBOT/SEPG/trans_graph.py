@@ -175,5 +175,7 @@ if __name__ == '__main__':
     for tree_depth in range(6, 7):
         # dataset = 'twibot-20'
         # struct_tree(dataset, tree_depth)
-        dataset = 'MGTAB'
+        # dataset = 'MGTAB'
+        # struct_tree(dataset, tree_depth)
+        dataset = 'twibot-22'
         struct_tree(dataset, tree_depth)

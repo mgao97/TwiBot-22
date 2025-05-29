@@ -110,17 +110,50 @@ class SEP_U(torch.nn.Module):
     def __process_layer_edgeIndex(self, batch, layer=0):
         if layer == 0:
             return batch['data'].edge_index
-        return batch['layer_data']['layer_edgeMat'][layer].to(self.args.device)
+        # 移除树数据依赖，直接返回第0层的边索引
+        return batch['data'].edge_index
+
+    def __process_layer_edgeIndex(self, batch_data, layer=0):
+        # for i, graph in enumerate(batch_data):
+        #     # Add a check for 'node_size' key
+        #     if 'node_size' not in graph:
+        #         # If 'node_size' doesn't exist, use a default value
+        #         # For example, you could use the number of nodes in the graph
+        #         if 'G' in graph:
+        #             graph['node_size'] = {layer: len(graph['G'].nodes)}
+        #         else:
+        #             # Fallback to a default size if 'G' is also not available
+        #             graph['node_size'] = {layer: 1}
+                    
+        #     start_idx.append(start_idx[i] + graph['node_size'][layer])
+        if layer == 0:
+            return batch_data['data'].edge_index
+        # 移除树数据依赖，直接返回第0层的边索引
+        return batch_data['data'].edge_index
 
     def __process_sep_edgeIndex(self, batch, layer=1):
-        return batch['layer_data']['interLayer_edgeMat'][layer].to(
-            self.args.device)
+        # 移除树数据依赖，直接返回空边索引
+        return torch.zeros((2, 0), dtype=torch.long).to(self.args.device)
 
     def __process_sep_size(self, batch, layer=1):
-        return [
-            batch['layer_data']['node_size'][layer],
-            batch['layer_data']['node_size'][layer - 1]
-        ]
+        # 移除树数据依赖，返回默认大小
+        node_size = batch['data'].x.size(0)
+        return [node_size, node_size]
+
+    # def __process_layer_edgeIndex(self, batch, layer=0):
+    #     if layer == 0:
+    #         return batch['data'].edge_index
+    #     return batch['layer_data']['layer_edgeMat'][layer].to(self.args.device)
+
+    # def __process_sep_edgeIndex(self, batch, layer=1):
+    #     return batch['layer_data']['interLayer_edgeMat'][layer].to(
+    #         self.args.device)
+
+    # def __process_sep_size(self, batch, layer=1):
+    #     return [
+    #         batch['layer_data']['node_size'][layer],
+    #         batch['layer_data']['node_size'][layer - 1]
+    #     ]
 
     def get_convs(self):
         convs = nn.ModuleList()
@@ -216,3 +249,52 @@ class SEP_U(torch.nn.Module):
         # For Classification
         x = self.classifier(x)
         return x
+
+    # def forward(self, batch):
+    #     x = batch['data'].x
+
+    #     x = xIn = self.feature_encoder(x)
+    #     xs = []
+    #     # down sampling
+    #     for _ in range(self.args.num_blocks):  # layer = 1, 2
+    #         # mp
+    #         edge_index = self.__process_layer_edgeIndex(batch, _)
+    #         x = F.dropout(F.relu(self.convs[_](x, edge_index)),
+    #                       self.d1,
+    #                       training=self.training)
+    #         xs.append(x)
+    #         # sep
+    #         edge_index = self.__process_sep_edgeIndex(batch, _ + 1)
+    #         size = self.__process_sep_size(batch, _ + 1)
+    #         x = F.dropout(F.relu(self.sepools[_](x, edge_index, size=size)),
+    #                       self.d2,
+    #                       training=self.training)
+
+    #     # up sampling
+    #     for _ in range(self.args.num_blocks, 0, -1):
+    #         # mp
+    #         edge_index = self.__process_layer_edgeIndex(batch, _)
+    #         x = F.dropout(F.relu(self.convs[self.args.num_blocks * 2 - _](
+    #             x, edge_index)),
+    #                       self.d1,
+    #                       training=self.training)
+    #         # sep_u
+    #         edge_index = self.__process_sep_edgeIndex(batch, _)
+    #         size = self.__process_sep_size(batch, _)
+    #         size.reverse()
+    #         x = F.dropout(F.relu(self.sepools[self.args.num_blocks * 2 - _](
+    #             x, edge_index[[1, 0]], size=size)),
+    #                       self.d2,
+    #                       training=self.training)
+    #         x = torch.cat([x, xs[_ - 1]], dim=1)
+
+    #     # last conv
+    #     edge_index = self.__process_layer_edgeIndex(batch, 0)
+    #     # link input
+    #     if self.args.link_input:
+    #         x = torch.cat([x, xIn], dim=1)
+    #     x = self.convs[-1](x, edge_index)
+
+    #     # For Classification
+    #     x = self.classifier(x)
+    #     return x
